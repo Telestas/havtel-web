@@ -18,3 +18,22 @@ View your app in AI Studio: https://ai.studio/apps/3830bd5f-a9e7-425f-b9ce-6bb52
 2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
 3. Run the app:
    `npm run dev`
+
+## Deploy to GitHub Pages
+
+This project is configured to deploy automatically to GitHub Pages from the `main` branch.
+
+1. Push this repo to GitHub.
+2. In GitHub, go to `Settings > Pages`.
+3. Under `Build and deployment`, select `GitHub Actions` as the source.
+4. Push to `main` or run the `Deploy to GitHub Pages` workflow manually from the `Actions` tab.
+
+After the workflow finishes, the demo will be published at:
+
+`https://<your-user>.github.io/<your-repo>/`
+
+Notes:
+
+- The Vite `base` path is adjusted automatically for GitHub Pages project URLs.
+- Right now the app is effectively static, so GitHub Pages is a good fit.
+- If you later add real Gemini requests in the browser, do not expose a private API key in the frontend.
