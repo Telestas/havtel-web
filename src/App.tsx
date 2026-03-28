@@ -3,6 +3,7 @@ import {
   ShoppingCart, 
   User, 
   CircleUserRound,
+  Check,
   ArrowRight, 
   ChevronRight, 
   Globe, 
@@ -12,12 +13,21 @@ import {
   Search,
   MapPin,
   Mail,
+  Lock,
+  BadgePercent,
+  Star,
   AtSign,
   Phone,
+  Minus,
+  Plus,
   Pencil,
   Trash2,
   IdCard,
   Eye,
+  X,
+  CreditCard,
+  Wallet,
+  Truck,
   Cpu,
   Monitor,
   Database,
@@ -30,7 +40,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
-type View = 'home' | 'shop' | 'support' | 'account' | 'orders';
+type View = 'home' | 'shop' | 'support' | 'account' | 'orders' | 'cart' | 'shipping' | 'payment' | 'review' | 'confirmed' | 'tracking' | 'product' | 'notfound';
 
 interface Product {
   id: number;
@@ -43,6 +53,15 @@ interface Product {
   category: string;
   brand: string;
 }
+
+interface CartItem {
+  productId: number;
+  quantity: number;
+  variant: string;
+}
+
+const formatCurrency = (value: number) =>
+  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
 
 const PRODUCTS: Product[] = [
   { id: 1, name: "Quantum X-8000", series: "HAVTEL CORE", price: 799, priceString: "$799.00", tag: "IN STOCK", img: "https://lh3.googleusercontent.com/aida-public/AB6AXuDp0KEdaGdGbkMYURtpl7ALxvrwOa4iLj3c8O4D8gHYYqUnkrad2_dtvDBKrCUH43eXN3bz0_UFSZnOp5yUlfvoWIDcyOve3usV2EcMerkkx1DcRmLscU3gcymcCTrcnNf5Pu9NYTZIgVho6mLrI4aI9ty5EAVVbkt14bT__UjoJMteub1sv_sK9hsm-vIN-pkFErL7mOMYatN1aLahjQxMdn0xsAVFeLNBga_s6IDgH9XzobThpSwOeSB0osXssqyTKoiNDQ9LcrKM", category: "PROCESSORS", brand: "Havtel Core" },
@@ -57,15 +76,52 @@ const PRODUCTS: Product[] = [
 
 export default function App() {
   const [view, setView] = useState<View>('home');
-  const [cartCount, setCartCount] = useState(0);
+  const [selectedProductId, setSelectedProductId] = useState<number>(1);
   const [notification, setNotification] = useState<string | null>(null);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement | null>(null);
+  const [cartItems, setCartItems] = useState<CartItem[]>([
+    { productId: 3, quantity: 1, variant: 'Aether Black | Founders Edition' },
+    { productId: 5, quantity: 1, variant: 'Core Silver | Performance Bundle' },
+    { productId: 8, quantity: 2, variant: 'Titanium Slate | Precision Switches' },
+  ]);
+  const [shippingMethod, setShippingMethod] = useState<'priority' | 'express'>('priority');
+
+  const cartCount = cartItems.reduce((total, item) => total + item.quantity, 0);
+  const isCheckoutView =
+    view === 'cart' || view === 'shipping' || view === 'payment' || view === 'review' || view === 'confirmed' || view === 'tracking';
 
   const addToCart = (productName: string) => {
-    setCartCount(prev => prev + 1);
+    const product = PRODUCTS.find((item) => item.name === productName);
+
+    if (product) {
+      setCartItems((prev) => {
+        const existing = prev.find((item) => item.productId === product.id);
+
+        if (existing) {
+          return prev.map((item) =>
+            item.productId === product.id ? { ...item, quantity: item.quantity + 1 } : item
+          );
+        }
+
+        return [
+          ...prev,
+          {
+            productId: product.id,
+            quantity: 1,
+            variant: `${product.brand} | ${product.series}`,
+          },
+        ];
+      });
+    }
+
     setNotification(`Added ${productName} to cart`);
     setTimeout(() => setNotification(null), 3000);
+  };
+
+  const openProduct = (productId: number) => {
+    setSelectedProductId(productId);
+    setView('product');
   };
 
   useEffect(() => {
@@ -90,8 +146,25 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    const syncHashView = () => {
+      if (window.location.hash === '#404') {
+        setView('notfound');
+      }
+    };
+
+    syncHashView();
+    window.addEventListener('hashchange', syncHashView);
+
+    return () => {
+      window.removeEventListener('hashchange', syncHashView);
+    };
+  }, []);
+
   return (
     <div className="min-h-screen bg-[#101419] text-[#e0e2ea] font-sans selection:bg-[#aac7ff]/30 antialiased">
+      {!isCheckoutView && (
+      <>
       {/* Top Navigation Bar */}
       <nav className="fixed top-0 w-full z-50 bg-[#101419]/50 backdrop-blur-lg border-b border-white/5 flex justify-between items-center px-8 md:px-12 h-20">
         <div 
@@ -123,7 +196,11 @@ export default function App() {
           <button className="text-slate-400 hover:text-slate-100 transition-colors text-sm font-medium">Pre-order</button>
         </div>
         <div className="flex items-center gap-6">
-          <button className="text-slate-400 hover:text-slate-100 transition-colors p-2 rounded-full hover:bg-white/5 relative">
+          <button
+            type="button"
+            onClick={() => setView('cart')}
+            className="text-slate-400 hover:text-slate-100 transition-colors p-2 rounded-full hover:bg-white/5 relative"
+          >
             <ShoppingCart size={20} />
             {cartCount > 0 && (
               <span className="absolute -top-1 -right-1 bg-[#3e90ff] text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
@@ -209,12 +286,108 @@ export default function App() {
           </motion.div>
         )}
       </AnimatePresence>
+      </>
+      )}
 
       <AnimatePresence mode="wait">
         {view === 'home' ? (
-          <Home key="home" onShopClick={() => setView('shop')} />
+          <Home key="home" onShopClick={() => setView('shop')} onProductSelect={openProduct} />
+        ) : view === 'notfound' ? (
+          <NotFoundView key="notfound" onGoHome={() => {
+            window.location.hash = '';
+            setView('home');
+          }} />
         ) : view === 'shop' ? (
-          <Shop key="shop" onAddToCart={addToCart} />
+          <Shop key="shop" onAddToCart={addToCart} onProductSelect={openProduct} />
+        ) : view === 'product' ? (
+          <ProductDetailView
+            key="product"
+            product={PRODUCTS.find((item) => item.id === selectedProductId) ?? PRODUCTS[0]}
+            onAddToCart={addToCart}
+            onBackToShop={() => setView('shop')}
+            onProductSelect={openProduct}
+          />
+        ) : view === 'payment' ? (
+          <PaymentView
+            key="payment"
+            cartItems={cartItems}
+            shippingMethod={shippingMethod}
+            onClose={() => setView('home')}
+            onGoHome={() => setView('home')}
+            onBackToShipping={() => setView('shipping')}
+            onBackToCart={() => setView('cart')}
+            onProceedToReview={() => setView('review')}
+          />
+        ) : view === 'review' ? (
+          <ReviewView
+            key="review"
+            cartItems={cartItems}
+            shippingMethod={shippingMethod}
+            onClose={() => setView('home')}
+            onGoHome={() => setView('home')}
+            onBackToPayment={() => setView('payment')}
+            onBackToShipping={() => setView('shipping')}
+            onBackToCart={() => setView('cart')}
+            onPlaceOrder={() => setView('confirmed')}
+          />
+        ) : view === 'tracking' ? (
+          <TrackOrderView
+            key="tracking"
+            cartItems={cartItems}
+            shippingMethod={shippingMethod}
+            onClose={() => setView('home')}
+            onGoHome={() => setView('home')}
+            onBackToOrders={() => setView('orders')}
+            onContinueShopping={() => setView('shop')}
+          />
+        ) : view === 'confirmed' ? (
+          <OrderConfirmedView
+            key="confirmed"
+            cartItems={cartItems}
+            shippingMethod={shippingMethod}
+            onClose={() => setView('home')}
+            onGoHome={() => setView('home')}
+            onTrackOrder={() => setView('tracking')}
+            onContinueShopping={() => setView('shop')}
+          />
+        ) : view === 'shipping' ? (
+          <ShippingView
+            key="shipping"
+            cartItems={cartItems}
+            shippingMethod={shippingMethod}
+            onShippingMethodChange={setShippingMethod}
+            onClose={() => setView('home')}
+            onGoHome={() => setView('home')}
+            onBackToCart={() => setView('cart')}
+            onProceedToPayment={() => setView('payment')}
+          />
+        ) : view === 'cart' ? (
+          <ShoppingBagView
+            key="cart"
+            cartItems={cartItems}
+            onClose={() => setView('home')}
+            onGoHome={() => setView('home')}
+            onProceedToShipping={() => setView('shipping')}
+            onDecreaseQuantity={(productId) =>
+              setCartItems((prev) =>
+                prev.flatMap((item) => {
+                  if (item.productId !== productId) return [item];
+                  if (item.quantity <= 1) return [];
+                  return [{ ...item, quantity: item.quantity - 1 }];
+                })
+              )
+            }
+            onIncreaseQuantity={(productId) =>
+              setCartItems((prev) =>
+                prev.map((item) =>
+                  item.productId === productId ? { ...item, quantity: item.quantity + 1 } : item
+                )
+              )
+            }
+            onRemoveItem={(productId) =>
+              setCartItems((prev) => prev.filter((item) => item.productId !== productId))
+            }
+          />
         ) : view === 'orders' ? (
           <OrderHistory key="orders" onBackToAccount={() => setView('account')} onGoHome={() => setView('home')} />
         ) : view === 'account' ? (
@@ -225,6 +398,8 @@ export default function App() {
       </AnimatePresence>
 
 
+      {!isCheckoutView && (
+      <>
       {/* Footer */}
       <footer className="bg-[#0a0e13] border-t border-white/5 px-8 md:px-24 py-20 text-sm text-slate-400">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-12 mb-20">
@@ -280,11 +455,1706 @@ export default function App() {
           Expert Support
         </span>
       </button>
+      </>
+      )}
     </div>
   );
 }
 
-function Home({ onShopClick }: { onShopClick: () => void; key?: string }) {
+function ShoppingBagView({
+  cartItems,
+  onClose,
+  onGoHome,
+  onProceedToShipping,
+  onDecreaseQuantity,
+  onIncreaseQuantity,
+  onRemoveItem,
+}: {
+  cartItems: CartItem[];
+  onClose: () => void;
+  onGoHome: () => void;
+  onProceedToShipping: () => void;
+  onDecreaseQuantity: (productId: number) => void;
+  onIncreaseQuantity: (productId: number) => void;
+  onRemoveItem: (productId: number) => void;
+  key?: string;
+}) {
+  const subtotal = cartItems.reduce((sum, item) => {
+    const product = PRODUCTS.find((entry) => entry.id === item.productId);
+    return sum + (product?.price ?? 0) * item.quantity;
+  }, 0);
+  const tax = subtotal * 0.08;
+  const total = subtotal + tax;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="min-h-screen bg-[#0b1016] text-slate-100"
+    >
+      <header className="border-b border-white/5 bg-[#10151d]/90 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-[1600px] items-center justify-between px-8 py-7 md:px-16">
+          <button type="button" onClick={onGoHome} className="text-2xl font-black tracking-tighter text-[#b5cbff]">
+            Havtel
+          </button>
+          <nav className="hidden md:flex items-center gap-10 text-sm">
+            {['Cart', 'Shipping', 'Payment', 'Review'].map((step, index) => (
+              <div
+                key={step}
+                className={`border-b-2 pb-2 ${index === 0 ? 'border-[#aac7ff] text-[#d6e4ff]' : 'border-transparent text-slate-400'}`}
+              >
+                {step}
+              </div>
+            ))}
+          </nav>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full p-2 text-[#b5cbff] transition-colors hover:bg-white/5 hover:text-white"
+            aria-label="Close shopping bag"
+          >
+            <X size={28} />
+          </button>
+        </div>
+      </header>
+
+      <main className="mx-auto max-w-[1600px] px-8 py-14 md:px-16">
+        <div className="grid grid-cols-1 gap-10 xl:grid-cols-[minmax(0,1fr)_420px]">
+          <section>
+            <div className="mb-10 flex items-end justify-between gap-6">
+              <div>
+                <span className="mb-4 block text-xs font-bold uppercase tracking-[0.35em] text-[#aac7ff]">Your Selection</span>
+                <h1 className="text-5xl font-black tracking-tighter md:text-6xl">Shopping Cart</h1>
+              </div>
+              <div className="text-sm uppercase tracking-[0.25em] text-slate-400">
+                {cartItems.reduce((count, item) => count + item.quantity, 0)} Items
+              </div>
+            </div>
+
+            <div className="space-y-6">
+              {cartItems.map((item) => {
+                const product = PRODUCTS.find((entry) => entry.id === item.productId);
+                if (!product) return null;
+
+                return (
+                  <div
+                    key={item.productId}
+                    className="rounded-[28px] border border-white/5 bg-[#141b25] p-5 shadow-[0_24px_60px_rgba(0,0,0,0.22)] md:p-7"
+                  >
+                    <div className="flex flex-col gap-6 md:flex-row md:items-center">
+                      <div className="h-40 w-full overflow-hidden rounded-2xl bg-[#0a0f14] md:h-36 md:w-40">
+                        <img
+                          src={product.img}
+                          alt={product.name}
+                          className="h-full w-full object-cover"
+                          referrerPolicy="no-referrer"
+                        />
+                      </div>
+
+                      <div className="flex-1">
+                        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                          <div>
+                            <h2 className="text-3xl font-bold tracking-tight text-slate-100">{product.name}</h2>
+                            <p className="mt-2 text-lg text-slate-400">{item.variant}</p>
+                          </div>
+                          <div className="text-3xl font-black text-[#aac7ff]">
+                            {formatCurrency(product.price * item.quantity)}
+                          </div>
+                        </div>
+
+                        <div className="mt-8 flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+                          <div className="inline-flex items-center gap-6 rounded-full bg-[#0b1016] px-6 py-4">
+                            <button type="button" onClick={() => onDecreaseQuantity(item.productId)} className="text-xl text-slate-300 transition-colors hover:text-white">
+                              <Minus size={18} />
+                            </button>
+                            <span className="min-w-4 text-center text-lg font-bold text-slate-100">{item.quantity}</span>
+                            <button type="button" onClick={() => onIncreaseQuantity(item.productId)} className="text-xl text-slate-300 transition-colors hover:text-white">
+                              <Plus size={18} />
+                            </button>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => onRemoveItem(item.productId)}
+                            className="inline-flex items-center gap-3 text-sm font-bold uppercase tracking-[0.2em] text-slate-400 transition-colors hover:text-white"
+                          >
+                            <Trash2 size={16} />
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {cartItems.length === 0 && (
+                <div className="rounded-[28px] border border-white/5 bg-[#141b25] p-12 text-center">
+                  <h2 className="text-3xl font-bold tracking-tight text-slate-100 mb-3">Your shopping bag is empty</h2>
+                  <p className="text-slate-400 mb-8">Add products from the catalog to build your next HAVTEL order.</p>
+                  <button
+                    type="button"
+                    onClick={onGoHome}
+                    className="inline-flex items-center gap-3 rounded-2xl bg-gradient-to-br from-[#aac7ff] to-[#3e90ff] px-8 py-5 text-lg font-bold text-[#003064]"
+                  >
+                    Go to Home
+                    <ArrowRight size={20} />
+                  </button>
+                </div>
+              )}
+            </div>
+          </section>
+
+          <aside className="rounded-[32px] border border-white/5 bg-[#141b25] p-8 shadow-[0_30px_80px_rgba(0,0,0,0.3)] h-fit xl:sticky xl:top-10">
+            <h2 className="mb-10 text-4xl font-black tracking-tight text-slate-100">Order Summary</h2>
+
+            <div className="space-y-6 text-lg">
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-slate-300">Subtotal</span>
+                <span className="font-semibold text-slate-100">
+                  {formatCurrency(subtotal)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-slate-300">Shipping</span>
+                <span className="text-sm font-bold uppercase tracking-[0.22em] text-[#9dd6ff]">Calculated at next step</span>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-slate-300">Tax</span>
+                <span className="font-semibold text-slate-100">
+                  {formatCurrency(tax)}
+                </span>
+              </div>
+            </div>
+
+            <div className="my-8 border-t border-white/5"></div>
+
+            <div className="flex items-end justify-between gap-4">
+              <div>
+                <div className="text-2xl font-bold text-slate-100">Total</div>
+              </div>
+              <div className="text-right">
+                <div className="text-5xl font-black tracking-tight text-[#9ebeff]">
+                  {formatCurrency(total)}
+                </div>
+                <div className="mt-2 text-sm uppercase tracking-[0.24em] text-slate-400">Including VAT</div>
+              </div>
+            </div>
+
+            <div className="mt-10">
+              <label className="mb-4 block text-xs font-bold uppercase tracking-[0.3em] text-slate-400">
+                Promotional Code
+              </label>
+              <div className="flex gap-3">
+                <input
+                  type="text"
+                  defaultValue="HAVTEL2026"
+                  className="min-w-0 flex-1 rounded-2xl border border-white/5 bg-[#0b1016] px-5 py-4 text-base text-slate-300 focus:outline-none focus:border-[#aac7ff]/40"
+                />
+                <button type="button" className="rounded-2xl bg-white/12 px-6 py-4 text-lg font-bold text-[#aac7ff] transition-colors hover:bg-white/18">
+                  Apply
+                </button>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={onProceedToShipping}
+              className="mt-10 w-full rounded-[22px] bg-gradient-to-r from-[#a9c7ff] to-[#4d93f7] px-8 py-6 text-lg font-black uppercase tracking-[0.22em] text-[#02182d] shadow-[0_24px_60px_rgba(77,147,247,0.35)] transition-transform hover:scale-[1.01]"
+            >
+              Proceed to Checkout
+            </button>
+
+            <div className="mt-10 flex items-center justify-center gap-8 text-slate-500">
+              <CreditCard size={24} />
+              <Wallet size={24} />
+              <ShieldCheck size={24} />
+            </div>
+            <p className="mt-6 text-center text-sm uppercase tracking-[0.24em] text-slate-500">
+              Secure SSL encryption & data protection guaranteed
+            </p>
+          </aside>
+        </div>
+      </main>
+
+      <footer className="border-t border-white/5 px-8 py-10 text-sm uppercase tracking-[0.24em] text-slate-500 md:px-16">
+        <div className="mx-auto flex max-w-[1600px] flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>© 2026 HAVTEL TECHNOLOGY. ALL RIGHTS RESERVED.</div>
+          <div className="flex flex-wrap gap-6">
+            <span>Privacy Policy</span>
+            <span>Terms of Service</span>
+            <span>Help Center</span>
+          </div>
+        </div>
+      </footer>
+    </motion.div>
+  );
+}
+
+function ShippingView({
+  cartItems,
+  shippingMethod,
+  onShippingMethodChange,
+  onClose,
+  onGoHome,
+  onBackToCart,
+  onProceedToPayment,
+}: {
+  cartItems: CartItem[];
+  shippingMethod: 'priority' | 'express';
+  onShippingMethodChange: (method: 'priority' | 'express') => void;
+  onClose: () => void;
+  onGoHome: () => void;
+  onBackToCart: () => void;
+  onProceedToPayment: () => void;
+  key?: string;
+}) {
+  const shippingCost = shippingMethod === 'priority' ? 12 : 35;
+  const subtotal = cartItems.reduce((sum, item) => {
+    const product = PRODUCTS.find((entry) => entry.id === item.productId);
+    return sum + (product?.price ?? 0) * item.quantity;
+  }, 0);
+  const tax = subtotal * 0.08;
+  const total = subtotal + shippingCost + tax;
+  const summaryItem = cartItems[0]
+    ? PRODUCTS.find((entry) => entry.id === cartItems[0].productId)
+    : null;
+  const summaryVariant = cartItems[0]?.variant ?? 'Configured order';
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="min-h-screen bg-[#0f141b] text-slate-100"
+    >
+      <header className="border-b border-white/5 bg-[#10151d]/90 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-[1600px] items-center justify-between px-8 py-7 md:px-16">
+          <button type="button" onClick={onGoHome} className="text-2xl font-black tracking-tighter text-[#b5cbff]">
+            Havtel
+          </button>
+          <nav className="hidden md:flex items-center gap-10 text-sm">
+            {['Cart', 'Shipping', 'Payment', 'Review'].map((step, index) => (
+              <button
+                key={step}
+                type="button"
+                onClick={() => {
+                  if (index === 0) onBackToCart();
+                }}
+                className={`border-b-2 pb-2 ${
+                  index === 1 ? 'border-[#aac7ff] text-[#d6e4ff]' : index < 1 ? 'border-transparent text-slate-300 hover:text-white' : 'border-transparent text-slate-400'
+                }`}
+              >
+                {step}
+              </button>
+            ))}
+          </nav>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full p-2 text-[#b5cbff] transition-colors hover:bg-white/5 hover:text-white"
+            aria-label="Close shipping"
+          >
+            <X size={28} />
+          </button>
+        </div>
+      </header>
+
+      <main className="mx-auto max-w-[1600px] px-8 py-14 md:px-16">
+        <div className="grid grid-cols-1 gap-10 xl:grid-cols-[minmax(0,1fr)_400px]">
+          <section>
+            <div className="mb-10">
+              <h1 className="text-5xl font-black tracking-tighter md:text-6xl">Shipping Logistics</h1>
+              <p className="mt-5 max-w-2xl text-2xl leading-relaxed text-slate-400">
+                Precision delivery for high-performance hardware. Enter your coordinates below.
+              </p>
+            </div>
+
+            <div className="mb-14 flex items-center gap-4 md:gap-6">
+              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#4d93f7] text-[#02182d]">
+                <div className="h-2.5 w-2.5 rounded-full bg-[#02182d]"></div>
+              </div>
+              <div className="h-1 flex-1 rounded-full bg-[#4d93f7]"></div>
+              <div className="flex h-10 w-10 items-center justify-center rounded-full border border-[#a9c7ff]/30 bg-[#141b25] shadow-[0_0_20px_rgba(169,199,255,0.2)]">
+                <div className="h-3 w-3 rounded-full bg-[#a9c7ff]"></div>
+              </div>
+              <div className="h-1 flex-1 rounded-full bg-white/10"></div>
+              <div className="h-1 flex-1 rounded-full bg-white/5"></div>
+            </div>
+
+            <form className="space-y-14">
+              <div>
+                <div className="mb-8 flex items-center gap-4">
+                  <span className="inline-flex h-8 min-w-8 items-center justify-center rounded-lg bg-[#172131] px-2 text-xs font-black tracking-[0.2em] text-[#aac7ff]">01</span>
+                  <h2 className="text-4xl font-bold tracking-tight">Contact Information</h2>
+                </div>
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                  <label className="block">
+                    <span className="mb-4 block text-sm font-bold uppercase tracking-[0.24em] text-slate-300">Email Address</span>
+                    <input
+                      type="email"
+                      placeholder="name@domain.tech"
+                      className="w-full rounded-2xl border border-white/5 bg-[#0b1016] px-6 py-5 text-xl text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-[#aac7ff]/40"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="mb-4 block text-sm font-bold uppercase tracking-[0.24em] text-slate-300">Phone Number</span>
+                    <input
+                      type="tel"
+                      placeholder="+1 (555) 000-0000"
+                      className="w-full rounded-2xl border border-white/5 bg-[#0b1016] px-6 py-5 text-xl text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-[#aac7ff]/40"
+                    />
+                  </label>
+                </div>
+              </div>
+
+              <div>
+                <div className="mb-8 flex items-center gap-4">
+                  <span className="inline-flex h-8 min-w-8 items-center justify-center rounded-lg bg-[#172131] px-2 text-xs font-black tracking-[0.2em] text-[#aac7ff]">02</span>
+                  <h2 className="text-4xl font-bold tracking-tight">Destination Details</h2>
+                </div>
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                  <label className="block">
+                    <span className="mb-4 block text-sm font-bold uppercase tracking-[0.24em] text-slate-300">First Name</span>
+                    <input className="w-full rounded-2xl border border-white/5 bg-[#0b1016] px-6 py-5 text-xl text-slate-200 focus:outline-none focus:border-[#aac7ff]/40" />
+                  </label>
+                  <label className="block">
+                    <span className="mb-4 block text-sm font-bold uppercase tracking-[0.24em] text-slate-300">Last Name</span>
+                    <input className="w-full rounded-2xl border border-white/5 bg-[#0b1016] px-6 py-5 text-xl text-slate-200 focus:outline-none focus:border-[#aac7ff]/40" />
+                  </label>
+                  <label className="block md:col-span-2">
+                    <span className="mb-4 block text-sm font-bold uppercase tracking-[0.24em] text-slate-300">Street Address</span>
+                    <input
+                      placeholder="123 Tech Boulevard"
+                      className="w-full rounded-2xl border border-white/5 bg-[#0b1016] px-6 py-5 text-xl text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-[#aac7ff]/40"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="mb-4 block text-sm font-bold uppercase tracking-[0.24em] text-slate-300">City</span>
+                    <input className="w-full rounded-2xl border border-white/5 bg-[#0b1016] px-6 py-5 text-xl text-slate-200 focus:outline-none focus:border-[#aac7ff]/40" />
+                  </label>
+                  <label className="block">
+                    <span className="mb-4 block text-sm font-bold uppercase tracking-[0.24em] text-slate-300">State / Province</span>
+                    <input className="w-full rounded-2xl border border-white/5 bg-[#0b1016] px-6 py-5 text-xl text-slate-200 focus:outline-none focus:border-[#aac7ff]/40" />
+                  </label>
+                  <label className="block">
+                    <span className="mb-4 block text-sm font-bold uppercase tracking-[0.24em] text-slate-300">Postal Code</span>
+                    <input className="w-full rounded-2xl border border-white/5 bg-[#0b1016] px-6 py-5 text-xl text-slate-200 focus:outline-none focus:border-[#aac7ff]/40" />
+                  </label>
+                </div>
+              </div>
+
+              <div>
+                <div className="mb-8 flex items-center gap-4">
+                  <span className="inline-flex h-8 min-w-8 items-center justify-center rounded-lg bg-[#172131] px-2 text-xs font-black tracking-[0.2em] text-[#aac7ff]">03</span>
+                  <h2 className="text-4xl font-bold tracking-tight">Delivery Method</h2>
+                </div>
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={() => onShippingMethodChange('priority')}
+                    className={`rounded-[24px] border p-6 text-left transition-all ${
+                      shippingMethod === 'priority'
+                        ? 'border-[#b9d1ff] bg-[#1b2129] shadow-[0_0_0_2px_rgba(185,209,255,0.15)]'
+                        : 'border-white/5 bg-[#0b1016]'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <div className="text-3xl font-bold tracking-tight text-slate-100">Priority Tech-Ship</div>
+                        <div className="mt-2 text-xl text-slate-400">2-3 Business Days</div>
+                      </div>
+                      <div className="text-2xl font-semibold text-[#b9d1ff]">$12.00</div>
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onShippingMethodChange('express')}
+                    className={`rounded-[24px] border p-6 text-left transition-all ${
+                      shippingMethod === 'express'
+                        ? 'border-[#b9d1ff] bg-[#1b2129] shadow-[0_0_0_2px_rgba(185,209,255,0.15)]'
+                        : 'border-white/5 bg-[#0b1016]'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <div className="text-3xl font-bold tracking-tight text-slate-100">Quantum Express</div>
+                        <div className="mt-2 text-xl text-slate-400">Next Day Guaranteed</div>
+                      </div>
+                      <div className="text-2xl font-semibold text-[#b9d1ff]">$35.00</div>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-4 sm:flex-row">
+                <button
+                  type="button"
+                  onClick={onBackToCart}
+                  className="rounded-[22px] border border-white/10 px-10 py-6 text-2xl font-bold text-slate-200 transition-colors hover:bg-white/5"
+                >
+                  Back to Cart
+                </button>
+                <button
+                  type="button"
+                  onClick={onProceedToPayment}
+                  className="rounded-[22px] bg-gradient-to-r from-[#a9c7ff] to-[#4d93f7] px-10 py-6 text-2xl font-bold text-[#02182d] shadow-[0_24px_60px_rgba(77,147,247,0.35)] transition-transform hover:scale-[1.01]"
+                >
+                  Proceed to Payment
+                </button>
+              </div>
+            </form>
+          </section>
+
+          <aside className="space-y-8">
+            <div className="rounded-[32px] border border-white/5 bg-[#1d232c] p-7 shadow-[0_30px_80px_rgba(0,0,0,0.3)]">
+              <div className="mb-6 text-sm font-bold uppercase tracking-[0.32em] text-slate-300">Cart Configuration</div>
+              {summaryItem && (
+                <>
+                  <div className="flex gap-5">
+                    <div className="h-24 w-24 overflow-hidden rounded-2xl bg-[#0b1016]">
+                      <img src={summaryItem.img} alt={summaryItem.name} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                    </div>
+                    <div>
+                      <h3 className="text-2xl font-bold tracking-tight text-slate-100">{summaryItem.name}</h3>
+                      <p className="mt-2 text-base text-slate-400">{summaryVariant}</p>
+                      <p className="mt-3 text-2xl font-black text-[#9dd6ff]">{formatCurrency(summaryItem.price * (cartItems[0]?.quantity ?? 1))}</p>
+                    </div>
+                  </div>
+                  <div className="my-7 border-t border-white/5"></div>
+                </>
+              )}
+
+              <div className="space-y-4 text-lg">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-300">Subtotal</span>
+                  <span className="font-semibold text-slate-100">{formatCurrency(subtotal)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-300">Shipping</span>
+                  <span className="font-semibold text-slate-100">{formatCurrency(shippingCost)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-300">Tax (Est.)</span>
+                  <span className="font-semibold text-slate-100">{formatCurrency(tax)}</span>
+                </div>
+              </div>
+
+              <div className="my-7 border-t border-white/5"></div>
+
+              <div className="flex items-end justify-between gap-4">
+                <span className="text-sm font-bold uppercase tracking-[0.28em] text-[#b5cbff]">Grand Total</span>
+                <span className="text-5xl font-black tracking-tight text-slate-100">{formatCurrency(total)}</span>
+              </div>
+            </div>
+
+            <div className="rounded-[28px] border border-white/5 bg-[#1b2129] p-7">
+              <div className="flex items-center gap-5">
+                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#123246] text-[#9dd6ff]">
+                  <ShieldCheck size={24} />
+                </div>
+                <div>
+                  <div className="text-xl font-bold text-slate-100">Encrypted Transaction</div>
+                  <div className="mt-1 text-sm text-slate-400">Havtel Secure Gate v2.4 Active</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="relative overflow-hidden rounded-[32px] border border-white/5 min-h-[250px] bg-[#0c1118]">
+              <img
+                src="https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1200&q=80"
+                alt="Hardware ecosystem"
+                className="absolute inset-0 h-full w-full object-cover opacity-75"
+                referrerPolicy="no-referrer"
+              />
+              <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(4,8,12,0.05),rgba(4,8,12,0.7))]"></div>
+              <div className="absolute bottom-6 left-6 text-sm font-bold uppercase tracking-[0.38em] text-[#d5e8ff]">
+                Hardware Ecosystem
+              </div>
+            </div>
+          </aside>
+        </div>
+      </main>
+
+      <footer className="border-t border-white/5 px-8 py-10 text-sm uppercase tracking-[0.24em] text-slate-500 md:px-16">
+        <div className="mx-auto flex max-w-[1600px] flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>© 2026 HAVTEL TECHNOLOGY. ALL RIGHTS RESERVED.</div>
+          <div className="flex flex-wrap gap-6">
+            <span>Privacy Policy</span>
+            <span>Terms of Service</span>
+            <span>Help Center</span>
+          </div>
+        </div>
+      </footer>
+    </motion.div>
+  );
+}
+
+function PaymentView({
+  cartItems,
+  shippingMethod,
+  onClose,
+  onGoHome,
+  onBackToShipping,
+  onBackToCart,
+  onProceedToReview,
+}: {
+  cartItems: CartItem[];
+  shippingMethod: 'priority' | 'express';
+  onClose: () => void;
+  onGoHome: () => void;
+  onBackToShipping: () => void;
+  onBackToCart: () => void;
+  onProceedToReview: () => void;
+  key?: string;
+}) {
+  const [paymentMethod, setPaymentMethod] = useState<'card' | 'paypal'>('card');
+  const [saveCard, setSaveCard] = useState(true);
+  const shippingCost = shippingMethod === 'priority' ? 12 : 35;
+  const shippingLabel = shippingMethod === 'priority' ? 'Priority Tech-Ship' : 'Quantum Express';
+  const subtotal = cartItems.reduce((sum, item) => {
+    const product = PRODUCTS.find((entry) => entry.id === item.productId);
+    return sum + (product?.price ?? 0) * item.quantity;
+  }, 0);
+  const tax = subtotal * 0.08;
+  const total = subtotal + shippingCost + tax;
+  const summaryItem = cartItems[0]
+    ? PRODUCTS.find((entry) => entry.id === cartItems[0].productId)
+    : null;
+  const summaryVariant = cartItems[0]?.variant ?? 'Configured order';
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="min-h-screen bg-[#0f141b] text-slate-100"
+    >
+      <header className="border-b border-white/5 bg-[#10151d]/90 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-[1600px] items-center justify-between px-8 py-7 md:px-16">
+          <button type="button" onClick={onGoHome} className="text-2xl font-black tracking-tighter text-[#b5cbff]">
+            Havtel
+          </button>
+          <nav className="hidden md:flex items-center gap-10 text-sm">
+            {['Cart', 'Shipping', 'Payment', 'Review'].map((step, index) => (
+              <button
+                key={step}
+                type="button"
+                onClick={() => {
+                  if (index === 0) onBackToCart();
+                  if (index === 1) onBackToShipping();
+                }}
+                className={`border-b-2 pb-2 ${
+                  index === 2 ? 'border-[#aac7ff] text-[#d6e4ff]' : index < 2 ? 'border-transparent text-slate-300 hover:text-white' : 'border-transparent text-slate-400'
+                }`}
+              >
+                {step}
+              </button>
+            ))}
+          </nav>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full p-2 text-[#b5cbff] transition-colors hover:bg-white/5 hover:text-white"
+            aria-label="Close payment"
+          >
+            <X size={28} />
+          </button>
+        </div>
+      </header>
+
+      <main className="mx-auto max-w-[1600px] px-8 py-14 md:px-16">
+        <div className="grid grid-cols-1 gap-10 xl:grid-cols-[minmax(0,1fr)_430px]">
+          <section className="space-y-10">
+            <div>
+              <h1 className="text-5xl font-black tracking-tighter text-slate-100 drop-shadow-[0_0_18px_rgba(169,199,255,0.18)] md:text-6xl">
+                Payment Method
+              </h1>
+              <p className="mt-5 max-w-3xl text-2xl text-slate-400">
+                Select your preferred way to complete the acquisition.
+              </p>
+            </div>
+
+            <div className="inline-flex rounded-[22px] bg-[#171d26] p-2">
+              <button
+                type="button"
+                onClick={() => setPaymentMethod('card')}
+                className={`inline-flex items-center gap-3 rounded-[18px] px-10 py-5 text-2xl font-bold transition-all ${
+                  paymentMethod === 'card' ? 'bg-[#232a34] text-[#b9d1ff]' : 'text-slate-300 hover:text-white'
+                }`}
+              >
+                <CreditCard size={22} />
+                Credit Card
+              </button>
+              <button
+                type="button"
+                onClick={() => setPaymentMethod('paypal')}
+                className={`inline-flex items-center gap-3 rounded-[18px] px-10 py-5 text-2xl font-bold transition-all ${
+                  paymentMethod === 'paypal' ? 'bg-[#232a34] text-[#b9d1ff]' : 'text-slate-300 hover:text-white'
+                }`}
+              >
+                <Wallet size={22} />
+                PayPal
+              </button>
+            </div>
+
+            <div className="rounded-[30px] border border-white/5 bg-[#20252d] p-8 md:p-10">
+              <div className="grid grid-cols-1 gap-8">
+                <label className="block">
+                  <span className="mb-4 block text-sm font-bold uppercase tracking-[0.26em] text-slate-300">Cardholder Name</span>
+                  <input
+                    type="text"
+                    placeholder="ALEXANDER VANCE"
+                    className="w-full rounded-2xl border border-white/5 bg-[#0b1016] px-7 py-5 text-2xl text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-[#aac7ff]/40"
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="mb-4 block text-sm font-bold uppercase tracking-[0.26em] text-slate-300">Card Number</span>
+                  <div className="flex items-center rounded-2xl border border-white/5 bg-[#0b1016] px-7 py-5">
+                    <input
+                      type="text"
+                      placeholder="0000 0000 0000 0000"
+                      className="w-full bg-transparent text-2xl text-slate-200 placeholder:text-slate-600 focus:outline-none"
+                    />
+                    <CreditCard size={24} className="text-slate-500" />
+                  </div>
+                </label>
+
+                <div className="grid grid-cols-1 gap-8 md:grid-cols-2">
+                  <label className="block">
+                    <span className="mb-4 block text-sm font-bold uppercase tracking-[0.26em] text-slate-300">Expiry Date</span>
+                    <input
+                      type="text"
+                      placeholder="MM / YY"
+                      className="w-full rounded-2xl border border-white/5 bg-[#0b1016] px-7 py-5 text-2xl text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-[#aac7ff]/40"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="mb-4 block text-sm font-bold uppercase tracking-[0.26em] text-slate-300">CVV</span>
+                    <input
+                      type="password"
+                      placeholder="•••"
+                      className="w-full rounded-2xl border border-white/5 bg-[#0b1016] px-7 py-5 text-2xl text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-[#aac7ff]/40"
+                    />
+                  </label>
+                </div>
+
+                <label className="inline-flex items-center gap-4 pt-2 text-xl text-slate-300">
+                  <button
+                    type="button"
+                    onClick={() => setSaveCard((prev) => !prev)}
+                    className={`flex h-8 w-8 items-center justify-center rounded-lg border transition-colors ${
+                      saveCard ? 'border-[#5878b8] bg-[#253651] text-[#b5cbff]' : 'border-white/10 bg-[#0f141b] text-transparent'
+                    }`}
+                  >
+                    <span className="text-base">✓</span>
+                  </button>
+                  Save this card for future high-speed transactions
+                </label>
+              </div>
+            </div>
+
+            <div className="rounded-[28px] border border-white/5 bg-[#161c24] p-8">
+              <div className="flex items-center gap-5">
+                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[#263246] text-[#b5cbff]">
+                  <Lock size={28} />
+                </div>
+                <div>
+                  <div className="text-2xl font-bold text-slate-100">Secure Encryption Active</div>
+                  <div className="mt-2 text-xl text-slate-400">
+                    Your financial data is processed via 256-bit AES military-grade encryption.
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <aside className="space-y-8">
+            <div className="rounded-[32px] border border-white/5 bg-[#232831] p-8 shadow-[0_30px_80px_rgba(0,0,0,0.3)]">
+              <h2 className="mb-10 text-4xl font-black tracking-tight text-[#b9d1ff]">Order Manifest</h2>
+              {summaryItem && (
+                <>
+                  <div className="flex gap-5">
+                    <div className="h-28 w-28 overflow-hidden rounded-2xl bg-[#0b1016]">
+                      <img src={summaryItem.img} alt={summaryItem.name} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                    </div>
+                    <div>
+                      <h3 className="text-2xl font-bold tracking-tight text-slate-100">{summaryItem.name}</h3>
+                      <p className="mt-2 text-xl text-slate-400">{summaryVariant}</p>
+                      <p className="mt-3 text-2xl font-black text-[#9dd6ff]">{formatCurrency(summaryItem.price * (cartItems[0]?.quantity ?? 1))}</p>
+                    </div>
+                  </div>
+                  <div className="my-8 border-t border-white/5"></div>
+                </>
+              )}
+
+              <div className="space-y-5 text-xl">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-300">Subtotal</span>
+                  <span className="text-slate-100">{formatCurrency(subtotal)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-300">Shipping ({shippingLabel})</span>
+                  <span className="text-[#9dd6ff]">{formatCurrency(shippingCost)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-300">Estimated Taxes</span>
+                  <span className="text-slate-100">{formatCurrency(tax)}</span>
+                </div>
+              </div>
+
+              <div className="my-8 border-t border-white/5"></div>
+
+              <div className="flex items-end justify-between gap-4">
+                <span className="text-2xl text-slate-300">Total Amount</span>
+                <span className="text-6xl font-black tracking-tight text-[#a9c7ff]">{formatCurrency(total)}</span>
+              </div>
+
+              <button
+                type="button"
+                onClick={onProceedToReview}
+                className="mt-10 w-full rounded-[24px] bg-gradient-to-r from-[#a9c7ff] to-[#4d93f7] px-8 py-6 text-2xl font-bold text-[#03192f] shadow-[0_24px_60px_rgba(77,147,247,0.35)] transition-transform hover:scale-[1.01]"
+              >
+                Confirm Acquisition →
+              </button>
+
+              <p className="mt-8 text-center text-sm uppercase tracking-[0.32em] text-slate-400">
+                By clicking, you agree to the Havtel protocols
+              </p>
+            </div>
+
+            <div className="rounded-[28px] border border-cyan-500/25 bg-[#10303c] p-7">
+              <div className="flex items-center justify-between gap-5">
+                <div className="flex items-center gap-4">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#0f4354] text-[#a6ecff]">
+                    <BadgePercent size={22} />
+                  </div>
+                  <span className="text-2xl text-slate-100">Apply Protocol Code</span>
+                </div>
+                <button type="button" className="flex h-11 w-11 items-center justify-center rounded-full border border-cyan-300/25 bg-[#174758] text-[#a6ecff] text-2xl">
+                  +
+                </button>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </main>
+
+      <footer className="border-t border-white/5 px-8 py-10 text-sm uppercase tracking-[0.24em] text-slate-500 md:px-16">
+        <div className="mx-auto flex max-w-[1600px] flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>© 2026 HAVTEL TECHNOLOGY. ALL RIGHTS RESERVED.</div>
+          <div className="flex flex-wrap gap-6">
+            <span>Privacy Policy</span>
+            <span>Terms of Service</span>
+            <span>Help Center</span>
+          </div>
+        </div>
+      </footer>
+    </motion.div>
+  );
+}
+
+function ReviewView({
+  cartItems,
+  shippingMethod,
+  onClose,
+  onGoHome,
+  onBackToPayment,
+  onBackToShipping,
+  onBackToCart,
+  onPlaceOrder,
+}: {
+  cartItems: CartItem[];
+  shippingMethod: 'priority' | 'express';
+  onClose: () => void;
+  onGoHome: () => void;
+  onBackToPayment: () => void;
+  onBackToShipping: () => void;
+  onBackToCart: () => void;
+  onPlaceOrder: () => void;
+  key?: string;
+}) {
+  const shippingCost = shippingMethod === 'priority' ? 12 : 35;
+  const shippingLabel = shippingMethod === 'priority' ? 'STANDARD EXPRESS (2-3 BUSINESS DAYS)' : 'QUANTUM EXPRESS (NEXT DAY)';
+  const subtotal = cartItems.reduce((sum, item) => {
+    const product = PRODUCTS.find((entry) => entry.id === item.productId);
+    return sum + (product?.price ?? 0) * item.quantity;
+  }, 0);
+  const tax = subtotal * 0.0825;
+  const total = subtotal + shippingCost + tax;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="min-h-screen bg-[#0f141b] text-slate-100"
+    >
+      <header className="border-b border-white/5 bg-[#10151d]/90 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-[1600px] items-center justify-between px-8 py-7 md:px-16">
+          <button type="button" onClick={onGoHome} className="text-2xl font-black tracking-tighter text-[#b5cbff]">
+            Havtel
+          </button>
+          <nav className="hidden md:flex items-center gap-10 text-sm">
+            {['Cart', 'Shipping', 'Payment', 'Review'].map((step, index) => (
+              <button
+                key={step}
+                type="button"
+                onClick={() => {
+                  if (index === 0) onBackToCart();
+                  if (index === 1) onBackToShipping();
+                  if (index === 2) onBackToPayment();
+                }}
+                className={`border-b-2 pb-2 ${
+                  index === 3 ? 'border-[#aac7ff] text-[#d6e4ff]' : 'border-transparent text-slate-300 hover:text-white'
+                }`}
+              >
+                {step}
+              </button>
+            ))}
+          </nav>
+          <button type="button" onClick={onClose} className="rounded-full p-2 text-[#b5cbff] transition-colors hover:bg-white/5 hover:text-white">
+            <X size={28} />
+          </button>
+        </div>
+      </header>
+
+      <main className="mx-auto max-w-[1600px] px-8 py-14 md:px-16">
+        <div className="grid grid-cols-1 gap-10 xl:grid-cols-[minmax(0,1fr)_410px]">
+          <section>
+            <div className="mb-14 max-w-4xl">
+              <h1 className="text-6xl font-black tracking-tighter md:text-7xl">Review your order.</h1>
+              <p className="mt-6 text-2xl leading-relaxed text-slate-400">
+                Please verify your details before confirming your purchase. Once placed, your items will be prepared for immediate dispatch.
+              </p>
+            </div>
+
+            <div className="mb-8 flex items-center justify-between gap-4">
+              <span className="text-sm font-bold uppercase tracking-[0.32em] text-[#b5cbff]">Items in Shipment</span>
+              <button type="button" onClick={onBackToCart} className="text-xl text-slate-300 hover:text-white">Edit Cart</button>
+            </div>
+
+            <div className="space-y-6">
+              {cartItems.map((item) => {
+                const product = PRODUCTS.find((entry) => entry.id === item.productId);
+                if (!product) return null;
+
+                return (
+                  <div key={item.productId} className="rounded-[28px] border border-white/5 bg-[#232831] p-7">
+                    <div className="flex flex-col gap-6 md:flex-row">
+                      <div className="h-40 w-40 overflow-hidden rounded-2xl bg-[#0b1016]">
+                        <img src={product.img} alt={product.name} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex flex-col gap-4 md:flex-row md:justify-between">
+                          <div>
+                            <h2 className="text-3xl font-bold tracking-tight">{product.name}</h2>
+                            <p className="mt-2 text-xl text-slate-400">{item.variant}</p>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-3xl font-black text-[#a9c7ff]">{formatCurrency(product.price * item.quantity)}</div>
+                            <div className="mt-2 text-lg text-slate-400">Qty: {item.quantity}</div>
+                          </div>
+                        </div>
+                        <div className="mt-8 flex flex-wrap gap-3">
+                          <span className="rounded-lg bg-[#1e4257] px-4 py-2 text-sm font-bold uppercase tracking-[0.18em] text-[#75d3ff]">In Stock</span>
+                          <span className="rounded-lg bg-white/8 px-4 py-2 text-sm font-bold uppercase tracking-[0.18em] text-slate-300">
+                            {shippingMethod === 'priority' ? 'Expedited Shipping' : 'Ships Next Day'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="mt-12 grid grid-cols-1 gap-8 lg:grid-cols-2">
+              <div className="rounded-[28px] border border-white/5 bg-[#161c24] p-8">
+                <div className="mb-8 flex items-center justify-between">
+                  <span className="text-sm font-bold uppercase tracking-[0.32em] text-[#b5cbff]">Shipping Address</span>
+                  <button type="button" onClick={onBackToShipping} className="text-lg font-bold text-[#b9d1ff]">Edit</button>
+                </div>
+                <div className="space-y-2 text-2xl text-slate-100">
+                  <p>Alex Thompson</p>
+                  <p className="text-slate-400">1284 Tech Plaza, Suite 402</p>
+                  <p className="text-slate-400">San Francisco, CA 94103</p>
+                  <p className="text-slate-400">United States</p>
+                </div>
+                <div className="mt-10 border-t border-white/5 pt-8">
+                  <div className="inline-flex items-center gap-3 text-lg uppercase tracking-[0.18em] text-slate-300">
+                    <Truck size={18} />
+                    {shippingLabel}
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-[28px] border border-white/5 bg-[#161c24] p-8">
+                <div className="mb-8 flex items-center justify-between">
+                  <span className="text-sm font-bold uppercase tracking-[0.32em] text-[#b5cbff]">Payment Method</span>
+                  <button type="button" onClick={onBackToPayment} className="text-lg font-bold text-[#b9d1ff]">Edit</button>
+                </div>
+                <div className="flex items-start gap-5">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-[#2a3446] text-[#b9d1ff]">
+                    <CreditCard size={24} />
+                  </div>
+                  <div>
+                    <div className="text-2xl font-bold text-slate-100">Visa ending in 8842</div>
+                    <div className="mt-1 text-xl text-slate-400">Expires 12/26</div>
+                  </div>
+                </div>
+                <div className="mt-8 border-t border-white/5 pt-8">
+                  <div className="text-lg text-slate-400">Billing Address</div>
+                  <div className="mt-2 text-xl text-slate-200">Same as shipping address</div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <aside className="rounded-[32px] border border-white/5 bg-[#232831] p-8 shadow-[0_30px_80px_rgba(0,0,0,0.3)] h-fit">
+            <h2 className="mb-10 text-4xl font-black tracking-tight">Order Summary</h2>
+            <div className="space-y-5 text-xl">
+              <div className="flex items-center justify-between"><span className="text-slate-300">Subtotal</span><span>{formatCurrency(subtotal)}</span></div>
+              <div className="flex items-center justify-between"><span className="text-slate-300">Shipping</span><span className="text-[#75d3ff]">{formatCurrency(shippingCost)}</span></div>
+              <div className="flex items-center justify-between"><span className="text-slate-300">Estimated Tax</span><span>{formatCurrency(tax)}</span></div>
+            </div>
+            <div className="my-8 border-t border-white/5"></div>
+            <div className="flex items-end justify-between gap-4">
+              <span className="text-3xl text-slate-100">Total</span>
+              <span className="text-6xl font-black tracking-tight text-[#a9c7ff]">{formatCurrency(total)}</span>
+            </div>
+            <button
+              type="button"
+              onClick={onPlaceOrder}
+              className="mt-10 w-full rounded-[24px] bg-gradient-to-r from-[#4d93f7] to-[#2482ff] px-8 py-6 text-2xl font-bold text-white shadow-[0_24px_60px_rgba(77,147,247,0.35)] transition-transform hover:scale-[1.01]"
+            >
+              Place Your Order
+            </button>
+            <p className="mt-8 text-lg leading-relaxed text-slate-400">
+              By clicking "Place Your Order", you agree to Havtel's Terms of Service and Privacy Policy.
+            </p>
+            <div className="mt-8 rounded-[20px] bg-[#0f141b] p-6">
+              <div className="flex items-start gap-4">
+                <div className="mt-1 flex h-10 w-10 items-center justify-center rounded-lg bg-[#1e4257] text-[#75d3ff]">
+                  <ShieldCheck size={20} />
+                </div>
+                <p className="text-lg leading-relaxed text-slate-300">
+                  Secure checkout with AES-256 encryption. Your payment information is never stored on our servers.
+                </p>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </main>
+
+      <footer className="border-t border-white/5 px-8 py-10 text-sm uppercase tracking-[0.24em] text-slate-500 md:px-16">
+        <div className="mx-auto flex max-w-[1600px] flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>© 2026 HAVTEL TECHNOLOGY. ALL RIGHTS RESERVED.</div>
+          <div className="flex flex-wrap gap-6">
+            <span>Privacy Policy</span>
+            <span>Terms of Service</span>
+            <span>Help Center</span>
+          </div>
+        </div>
+      </footer>
+    </motion.div>
+  );
+}
+
+function OrderConfirmedView({
+  cartItems,
+  shippingMethod,
+  onClose,
+  onGoHome,
+  onTrackOrder,
+  onContinueShopping,
+}: {
+  cartItems: CartItem[];
+  shippingMethod: 'priority' | 'express';
+  onClose: () => void;
+  onGoHome: () => void;
+  onTrackOrder: () => void;
+  onContinueShopping: () => void;
+  key?: string;
+}) {
+  const shippingCost = shippingMethod === 'priority' ? 12 : 35;
+  const subtotal = cartItems.reduce((sum, item) => {
+    const product = PRODUCTS.find((entry) => entry.id === item.productId);
+    return sum + (product?.price ?? 0) * item.quantity;
+  }, 0);
+  const tax = subtotal * 0.08;
+  const total = subtotal + shippingCost + tax;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="min-h-screen bg-[radial-gradient(circle_at_bottom_right,rgba(24,98,126,0.22),transparent_28%),#0f141b] text-slate-100"
+    >
+      <header className="border-b border-white/5 bg-[#10151d]/90 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-[1600px] items-center justify-between px-8 py-7 md:px-16">
+          <button type="button" onClick={onGoHome} className="text-2xl font-black tracking-tighter text-[#b5cbff]">Havtel</button>
+          <nav className="hidden md:flex items-center gap-10 text-sm">
+            {['Cart', 'Shipping', 'Payment', 'Review'].map((step, index) => (
+              <div key={step} className={`border-b-2 pb-2 ${index === 3 ? 'border-[#aac7ff] text-[#d6e4ff]' : 'border-transparent text-slate-300'}`}>
+                {step}
+              </div>
+            ))}
+          </nav>
+          <button type="button" onClick={onClose} className="rounded-full p-2 text-[#b5cbff] transition-colors hover:bg-white/5 hover:text-white">
+            <X size={28} />
+          </button>
+        </div>
+      </header>
+
+      <main className="mx-auto max-w-[1600px] px-8 py-14 md:px-16">
+        <div className="grid grid-cols-1 gap-10 xl:grid-cols-[minmax(0,1fr)_580px]">
+          <section className="pt-8">
+            <div className="mb-10 flex h-32 w-32 items-center justify-center rounded-full bg-[#2f3742] shadow-[0_0_50px_rgba(0,195,255,0.25)]">
+              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#9ee3ff] text-[#0a1520]">
+                <Check size={32} />
+              </div>
+            </div>
+            <h1 className="text-7xl font-black tracking-tighter">Order Confirmed.</h1>
+            <p className="mt-8 max-w-3xl text-3xl leading-relaxed text-slate-400">
+              Your high-performance setup is now in the queue. We've sent a detailed receipt to your registered email address.
+            </p>
+
+            <div className="mt-12 flex flex-col gap-4 sm:flex-row">
+              <button
+                type="button"
+                onClick={onTrackOrder}
+                className="rounded-[22px] bg-gradient-to-r from-[#a9c7ff] to-[#4d93f7] px-10 py-6 text-2xl font-bold text-[#02182d] shadow-[0_24px_60px_rgba(77,147,247,0.35)]"
+              >
+                Track Order
+              </button>
+              <button
+                type="button"
+                onClick={onContinueShopping}
+                className="rounded-[22px] border border-white/10 px-10 py-6 text-2xl font-bold text-[#b9d1ff] transition-colors hover:bg-white/5"
+              >
+                Continue Shopping
+              </button>
+            </div>
+
+            <div className="mt-24">
+              <div className="text-sm font-bold uppercase tracking-[0.34em] text-slate-300">Estimated Arrival</div>
+              <div className="mt-8 rounded-[28px] border border-white/5 bg-[#1f252d] p-8">
+                <div className="flex items-center gap-6">
+                  <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-[#303946] text-[#b9d1ff]">
+                    <Truck size={34} />
+                  </div>
+                  <div>
+                    <div className="text-3xl font-bold text-slate-100">Thursday, Oct 24 - Saturday, Oct 26</div>
+                    <div className="mt-3 text-2xl text-slate-400">
+                      {shippingMethod === 'priority' ? 'Standard High-Priority Logistics' : 'Quantum Express Priority Lane'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <aside className="rounded-[32px] border border-white/5 bg-[#232831] p-8 shadow-[0_30px_80px_rgba(0,0,0,0.3)] h-fit">
+            <div className="mb-8 flex items-center justify-between gap-4">
+              <h2 className="text-4xl font-black tracking-tight">Order Summary</h2>
+              <span className="rounded-full bg-white/6 px-4 py-2 text-lg text-slate-300">#HAV-99281-X</span>
+            </div>
+
+            <div className="space-y-8">
+              {cartItems.map((item) => {
+                const product = PRODUCTS.find((entry) => entry.id === item.productId);
+                if (!product) return null;
+                return (
+                  <div key={item.productId} className="flex gap-5">
+                    <div className="h-24 w-24 overflow-hidden rounded-2xl bg-[#0b1016]">
+                      <img src={product.img} alt={product.name} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <h3 className="text-2xl font-bold text-slate-100">{product.name}</h3>
+                          <p className="mt-2 text-xl text-slate-400">{item.variant}</p>
+                        </div>
+                        <span className="text-2xl text-slate-100">{formatCurrency(product.price * item.quantity)}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="my-8 border-t border-white/5"></div>
+            <div className="space-y-4 text-xl">
+              <div className="flex items-center justify-between"><span className="text-slate-300">Subtotal</span><span>{formatCurrency(subtotal)}</span></div>
+              <div className="flex items-center justify-between"><span className="text-slate-300">Shipping</span><span className="text-[#75d3ff]">{shippingMethod === 'express' ? 'Express Complimentary' : formatCurrency(shippingCost)}</span></div>
+              <div className="flex items-center justify-between"><span className="text-slate-300">Tax (EST)</span><span>{formatCurrency(tax)}</span></div>
+            </div>
+            <div className="my-8 border-t border-white/5"></div>
+            <div className="flex items-end justify-between gap-4">
+              <span className="text-3xl font-bold text-slate-100">Total</span>
+              <span className="text-5xl font-black tracking-tight text-[#a9c7ff]">{formatCurrency(total)}</span>
+            </div>
+
+            <div className="mt-10 border-t border-white/5 pt-8">
+              <div className="flex items-start gap-4">
+                <MapPin size={24} className="mt-1 text-slate-400" />
+                <div className="text-xl leading-relaxed text-slate-300">
+                  <div className="font-bold text-slate-100">Shipping To</div>
+                  <div className="mt-3">Alex Thompson</div>
+                  <div>742 Digital Horizon Parkway, Ste 402</div>
+                  <div>Neo-City, CA 94103</div>
+                </div>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </main>
+
+      <footer className="border-t border-white/5 px-8 py-10 text-sm uppercase tracking-[0.24em] text-slate-500 md:px-16">
+        <div className="mx-auto flex max-w-[1600px] flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>© 2026 HAVTEL TECHNOLOGY. ALL RIGHTS RESERVED.</div>
+          <div className="flex flex-wrap gap-6">
+            <span>Privacy Policy</span>
+            <span>Terms of Service</span>
+            <span>Help Center</span>
+          </div>
+        </div>
+      </footer>
+    </motion.div>
+  );
+}
+
+function TrackOrderView({
+  cartItems,
+  shippingMethod,
+  onClose,
+  onGoHome,
+  onBackToOrders,
+  onContinueShopping,
+}: {
+  cartItems: CartItem[];
+  shippingMethod: 'priority' | 'express';
+  onClose: () => void;
+  onGoHome: () => void;
+  onBackToOrders: () => void;
+  onContinueShopping: () => void;
+  key?: string;
+}) {
+  const subtotal = cartItems.reduce((sum, item) => {
+    const product = PRODUCTS.find((entry) => entry.id === item.productId);
+    return sum + (product?.price ?? 0) * item.quantity;
+  }, 0);
+  const shippingCost = shippingMethod === 'priority' ? 12 : 35;
+  const tax = subtotal * 0.08;
+  const total = subtotal + shippingCost + tax;
+  const trackingSteps = [
+    { title: 'Order Confirmed', detail: 'Payment verified and order created in the Havtel system.', done: true },
+    { title: 'Hardware Assembly', detail: 'Components are being prepared and packaged for dispatch.', done: true },
+    { title: 'In Transit', detail: 'Carrier manifest created. Pickup window scheduled for tonight.', done: false, current: true },
+    { title: 'Delivered', detail: 'Final delivery to your registered destination.', done: false },
+  ];
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(24,98,126,0.14),transparent_25%),#0f141b] text-slate-100"
+    >
+      <header className="border-b border-white/5 bg-[#10151d]/90 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-[1600px] items-center justify-between px-8 py-7 md:px-16">
+          <button type="button" onClick={onGoHome} className="text-2xl font-black tracking-tighter text-[#b5cbff]">Havtel</button>
+          <div className="hidden md:flex items-center gap-10 text-sm text-slate-300">
+            <span className="border-b-2 border-[#aac7ff] pb-2 text-[#d6e4ff]">Tracking</span>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-full p-2 text-[#b5cbff] transition-colors hover:bg-white/5 hover:text-white">
+            <X size={28} />
+          </button>
+        </div>
+      </header>
+
+      <main className="mx-auto max-w-[1600px] px-8 py-14 md:px-16">
+        <div className="grid grid-cols-1 gap-10 xl:grid-cols-[minmax(0,1fr)_420px]">
+          <section>
+            <div className="mb-12">
+              <span className="mb-4 block text-sm font-bold uppercase tracking-[0.34em] text-[#b5cbff]">Shipment Tracking</span>
+              <h1 className="text-6xl font-black tracking-tighter md:text-7xl">Track Your Order</h1>
+              <p className="mt-6 max-w-3xl text-2xl leading-relaxed text-slate-400">
+                Follow your hardware package in real time and review the latest fulfillment milestones for order `#HAV-99281-X`.
+              </p>
+            </div>
+
+            <div className="rounded-[30px] border border-white/5 bg-[#171d26] p-8 md:p-10">
+              <div className="mb-10 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+                <div>
+                  <div className="text-sm font-bold uppercase tracking-[0.3em] text-slate-400">Current Status</div>
+                  <div className="mt-3 text-4xl font-black text-[#9dd6ff]">In Transit</div>
+                </div>
+                <div className="text-xl text-slate-400">Estimated arrival: Thursday, Oct 24 - Saturday, Oct 26</div>
+              </div>
+
+              <div className="space-y-8">
+                {trackingSteps.map((step, index) => (
+                  <div key={step.title} className="flex gap-5">
+                    <div className="flex flex-col items-center">
+                      <div
+                        className={`flex h-12 w-12 items-center justify-center rounded-full ${
+                          step.done ? 'bg-[#9ee3ff] text-[#041521]' : step.current ? 'bg-[#223b53] text-[#b9d1ff] ring-4 ring-[#223b53]/40' : 'bg-[#252d39] text-slate-500'
+                        }`}
+                      >
+                        {step.done ? <Check size={22} /> : <div className="h-3 w-3 rounded-full bg-current"></div>}
+                      </div>
+                      {index < trackingSteps.length - 1 && (
+                        <div className={`mt-3 h-20 w-1 rounded-full ${step.done ? 'bg-[#5abaf0]' : 'bg-white/8'}`}></div>
+                      )}
+                    </div>
+                    <div className="pt-1">
+                      <h2 className="text-2xl font-bold text-slate-100">{step.title}</h2>
+                      <p className="mt-2 max-w-2xl text-xl leading-relaxed text-slate-400">{step.detail}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-10 flex flex-col gap-4 sm:flex-row">
+              <button
+                type="button"
+                onClick={onBackToOrders}
+                className="rounded-[22px] border border-white/10 px-8 py-5 text-xl font-bold text-[#b9d1ff] transition-colors hover:bg-white/5"
+              >
+                Back to Orders
+              </button>
+              <button
+                type="button"
+                onClick={onContinueShopping}
+                className="rounded-[22px] bg-gradient-to-r from-[#a9c7ff] to-[#4d93f7] px-8 py-5 text-xl font-bold text-[#02182d] shadow-[0_24px_60px_rgba(77,147,247,0.35)]"
+              >
+                Continue Shopping
+              </button>
+            </div>
+          </section>
+
+          <aside className="space-y-8">
+            <div className="rounded-[32px] border border-white/5 bg-[#232831] p-8 shadow-[0_30px_80px_rgba(0,0,0,0.3)]">
+              <div className="mb-8 flex items-center justify-between gap-4">
+                <h2 className="text-4xl font-black tracking-tight">Tracking Summary</h2>
+                <span className="rounded-full bg-white/6 px-4 py-2 text-lg text-slate-300">ZX-44-NEO-81</span>
+              </div>
+              <div className="space-y-6">
+                {cartItems.map((item) => {
+                  const product = PRODUCTS.find((entry) => entry.id === item.productId);
+                  if (!product) return null;
+                  return (
+                    <div key={item.productId} className="flex items-center justify-between gap-4">
+                      <div className="flex items-center gap-4">
+                        <div className="h-16 w-16 overflow-hidden rounded-xl bg-[#0b1016]">
+                          <img src={product.img} alt={product.name} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                        </div>
+                        <div>
+                          <div className="text-xl font-bold text-slate-100">{product.name}</div>
+                          <div className="text-base text-slate-400">Qty: {item.quantity}</div>
+                        </div>
+                      </div>
+                      <span className="text-lg text-slate-300">{formatCurrency(product.price * item.quantity)}</span>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="my-8 border-t border-white/5"></div>
+              <div className="space-y-4 text-lg">
+                <div className="flex items-center justify-between"><span className="text-slate-300">Subtotal</span><span>{formatCurrency(subtotal)}</span></div>
+                <div className="flex items-center justify-between"><span className="text-slate-300">Shipping</span><span>{formatCurrency(shippingCost)}</span></div>
+                <div className="flex items-center justify-between"><span className="text-slate-300">Tax</span><span>{formatCurrency(tax)}</span></div>
+              </div>
+              <div className="my-8 border-t border-white/5"></div>
+              <div className="flex items-end justify-between gap-4">
+                <span className="text-2xl font-bold text-slate-100">Total</span>
+                <span className="text-5xl font-black tracking-tight text-[#a9c7ff]">{formatCurrency(total)}</span>
+              </div>
+            </div>
+
+            <div className="rounded-[28px] border border-white/5 bg-[#161c24] p-8">
+              <div className="text-sm font-bold uppercase tracking-[0.32em] text-[#b5cbff] mb-6">Destination</div>
+              <div className="space-y-2 text-xl text-slate-300">
+                <div>Alex Thompson</div>
+                <div>742 Digital Horizon Parkway, Ste 402</div>
+                <div>Neo-City, CA 94103</div>
+                <div>United States</div>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </main>
+
+      <footer className="border-t border-white/5 px-8 py-10 text-sm uppercase tracking-[0.24em] text-slate-500 md:px-16">
+        <div className="mx-auto flex max-w-[1600px] flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>© 2026 HAVTEL TECHNOLOGY. ALL RIGHTS RESERVED.</div>
+          <div className="flex flex-wrap gap-6">
+            <span>Privacy Policy</span>
+            <span>Terms of Service</span>
+            <span>Help Center</span>
+          </div>
+        </div>
+      </footer>
+    </motion.div>
+  );
+}
+
+function ProductDetailView({
+  product,
+  onAddToCart,
+  onBackToShop,
+  onProductSelect,
+}: {
+  product: Product;
+  onAddToCart: (name: string) => void;
+  onBackToShop: () => void;
+  onProductSelect: (productId: number) => void;
+  key?: string;
+}) {
+  const [selectedTab, setSelectedTab] = useState<'description' | 'specs' | 'reviews'>('description');
+  const [selectedConfig, setSelectedConfig] = useState('16-Core / 32-Thread');
+  const [selectedImage, setSelectedImage] = useState(0);
+  const gallery = [product.img, PRODUCTS[1]?.img, PRODUCTS[6]?.img, PRODUCTS[3]?.img].filter(Boolean);
+  const relatedProducts = PRODUCTS.filter((item) => item.id !== product.id).slice(0, 4);
+  const specifications = [
+    ['Architecture', 'Lumina v4 (3nm)'],
+    ['Max Clock Speed', '5.8 GHz (Turbo)'],
+    ['L3 Cache', '128 MB'],
+    ['TDP (Standard)', '125W'],
+    ['Socket', 'Havtel LX-G1'],
+    ['Memory Type', 'DDR5-6400 MT/s'],
+  ];
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="pt-20 min-h-screen bg-[#0f141b]"
+    >
+      <section className="px-6 py-10 md:px-12 xl:px-20">
+        <div className="mb-8 flex items-center justify-between gap-4">
+          <div>
+            <span className="text-xs font-bold uppercase tracking-[0.3em] text-[#aac7ff]">Flagship Core</span>
+            <button type="button" onClick={onBackToShop} className="ml-4 text-sm text-slate-400 hover:text-white">
+              Back to Catalog
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-10 xl:grid-cols-[minmax(0,0.92fr)_560px] xl:items-start">
+          <div>
+            <div className="rounded-[30px] border border-white/5 bg-[#151b23] p-5 shadow-[0_24px_60px_rgba(0,0,0,0.24)] xl:max-w-[720px]">
+              <div className="aspect-[0.96/0.82] overflow-hidden rounded-[24px] bg-[#0a0f14]">
+                <img src={gallery[selectedImage]} alt={product.name} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+              </div>
+            </div>
+
+            <div className="mt-6 flex gap-4 overflow-x-auto pb-2">
+              {gallery.map((image, index) => (
+                <button
+                  key={`${image}-${index}`}
+                  type="button"
+                  onClick={() => setSelectedImage(index)}
+                  className={`h-20 min-w-20 overflow-hidden rounded-2xl border p-1 transition-all md:h-24 md:min-w-24 ${
+                    selectedImage === index ? 'border-[#aac7ff] bg-[#182130]' : 'border-white/8 bg-[#121821]'
+                  }`}
+                >
+                  <img src={image} alt={`${product.name} preview ${index + 1}`} className="h-full w-full rounded-xl object-cover" referrerPolicy="no-referrer" />
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <span className="inline-flex rounded-full bg-[#13273b] px-3 py-1 text-[10px] font-black uppercase tracking-[0.24em] text-[#b5cbff]">
+              Flagship Core
+            </span>
+            <h1 className="mt-4 text-5xl font-black tracking-tighter text-slate-100 md:text-6xl">{product.name}</h1>
+            <div className="mt-3 flex items-center gap-3">
+              <span className="text-4xl font-black text-[#d8e7ff]">{product.priceString}</span>
+              <span className="text-sm uppercase tracking-[0.22em] text-emerald-300">In Stock - Limited Edition</span>
+            </div>
+            <p className="mt-8 max-w-xl text-lg leading-relaxed text-slate-400">
+              Engineered for the next generation of computational dominance. The {product.name} leverages Havtel's proprietary photonic-bridge architecture to deliver unprecedented throughput.
+            </p>
+
+            <div className="mt-10">
+              <div className="mb-4 text-xs font-bold uppercase tracking-[0.28em] text-slate-300">Select Configuration</div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {[
+                  '16-Core / 32-Thread',
+                  '24-Core / 48-Thread',
+                ].map((config) => (
+                  <button
+                    key={config}
+                    type="button"
+                    onClick={() => setSelectedConfig(config)}
+                    className={`rounded-2xl border px-5 py-4 text-left transition-all ${
+                      selectedConfig === config ? 'border-[#aac7ff] bg-[#172131]' : 'border-white/8 bg-[#141a22]'
+                    }`}
+                  >
+                    <div className="text-sm font-bold text-slate-100">{config}</div>
+                    <div className="mt-1 text-xs text-slate-400">{config.includes('24-Core') ? 'X-8200 Ultra Edition' : 'Standard Performance'}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-8 space-y-3">
+              <button
+                type="button"
+                onClick={() => onAddToCart(product.name)}
+                className="w-full rounded-[18px] bg-gradient-to-r from-[#a9c7ff] to-[#4d93f7] px-8 py-5 text-lg font-bold text-[#03192f] shadow-[0_20px_50px_rgba(77,147,247,0.28)]"
+              >
+                Add to Cart
+              </button>
+              <button type="button" className="w-full rounded-[18px] border border-white/10 px-8 py-5 text-lg font-bold text-slate-200 transition-colors hover:bg-white/5">
+                Pre-order Now
+              </button>
+            </div>
+
+            <div className="mt-8 grid grid-cols-3 gap-4 text-center text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
+              <div className="rounded-2xl border border-white/5 bg-[#141a22] px-3 py-4">Secure Payment</div>
+              <div className="rounded-2xl border border-white/5 bg-[#141a22] px-3 py-4">3 Year Warranty</div>
+              <div className="rounded-2xl border border-white/5 bg-[#141a22] px-3 py-4">Global Priority</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="sticky bottom-6 z-30 mt-6 rounded-[24px] border border-white/8 bg-[#151b23]/95 px-5 py-4 shadow-[0_24px_60px_rgba(0,0,0,0.35)] backdrop-blur-xl md:px-8">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-center gap-4">
+              <div className="h-14 w-14 overflow-hidden rounded-xl bg-[#0b1016]">
+                <img src={product.img} alt={product.name} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+              </div>
+              <div>
+                <div className="text-sm font-bold text-slate-100">{product.name}</div>
+                <div className="text-xs uppercase tracking-[0.2em] text-slate-400">{selectedConfig} configuration</div>
+              </div>
+            </div>
+            <div className="flex items-center gap-6">
+              <div className="text-right">
+                <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Subtotal</div>
+                <div className="text-2xl font-black text-[#d8e7ff]">{product.priceString}</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => onAddToCart(product.name)}
+                className="rounded-2xl bg-gradient-to-r from-[#a9c7ff] to-[#4d93f7] px-8 py-4 text-base font-bold text-[#03192f]"
+              >
+                Add to Cart
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-12 border-b border-white/8">
+          <div className="flex gap-8 overflow-x-auto">
+            {[
+              ['description', 'Description'],
+              ['specs', 'Technical Specifications'],
+              ['reviews', 'Reviews (142)'],
+            ].map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setSelectedTab(id as 'description' | 'specs' | 'reviews')}
+                className={`border-b-2 px-1 py-4 text-sm font-bold ${selectedTab === id ? 'border-[#aac7ff] text-[#d8e7ff]' : 'border-transparent text-slate-400'}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-10 grid grid-cols-1 gap-10 xl:grid-cols-[minmax(0,1fr)_420px]">
+          <div>
+            {selectedTab === 'description' && (
+              <>
+                <h2 className="text-4xl font-black tracking-tight text-slate-100">The Future of Compute</h2>
+                <p className="mt-6 max-w-4xl text-lg leading-relaxed text-slate-400">
+                  The Havtel Quantum X-8000 isn't just a processor; it's a paradigm shift. Utilizing the Lumina v4 microarchitecture, we've optimized every nanometer to ensure that bottlenecking is a relic of the past. Whether you're compiling massive codebases, rendering 8K cinema-grade visuals, or training deep neural networks, the X-8000 adapts in real-time.
+                </p>
+                <blockquote className="mt-8 max-w-2xl rounded-[24px] border border-white/5 bg-[#161c24] px-6 py-5 text-base italic leading-relaxed text-slate-300">
+                  "The benchmark results for the X-8000 defy current expectations of a co-equal silicon. It's in a league of its own."
+                  <div className="mt-3 text-xs not-italic font-bold uppercase tracking-[0.2em] text-slate-500">Technexus Review Lab</div>
+                </blockquote>
+              </>
+            )}
+
+            {selectedTab === 'specs' && (
+              <>
+                <h2 className="text-4xl font-black tracking-tight text-slate-100">Technical Specifications</h2>
+                <div className="mt-8 grid grid-cols-1 gap-y-5 sm:grid-cols-2">
+                  {specifications.map(([label, value]) => (
+                    <div key={label} className="flex items-center justify-between gap-6 border-b border-white/5 py-4 sm:pr-8">
+                      <span className="text-sm text-slate-400">{label}</span>
+                      <span className="text-sm font-bold text-slate-100">{value}</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {selectedTab === 'reviews' && (
+              <>
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <h2 className="text-4xl font-black tracking-tight text-slate-100">User Feedback</h2>
+                    <div className="mt-3 flex items-center gap-3 text-slate-300">
+                      <div className="flex gap-1 text-[#aac7ff]">{Array.from({ length: 5 }).map((_, i) => <Star key={i} size={16} fill="currentColor" />)}</div>
+                      <span className="text-sm">4.9/5 (Based on 142 reviews)</span>
+                    </div>
+                  </div>
+                  <button type="button" className="rounded-2xl border border-white/10 px-5 py-3 text-sm font-bold text-slate-200 transition-colors hover:bg-white/5">
+                    Write a Review
+                  </button>
+                </div>
+                <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-3">
+                  {[
+                    ['Marcus Jensen', 'Lead 3D Artist', 'The transition from my previous gen to the Quantum X-8000 was night and day. Render times in Blender dropped by nearly 45%.'],
+                    ['Sarah Lin', 'Systems Engineer', 'Installation was a breeze. The thermals are incredibly stable even under 100% load during long simulation runs.'],
+                    ['David Byrne', 'Game Developer', 'High price tag, but you absolutely get what you pay for. The multi-threaded performance is unmatched in the consumer space.'],
+                  ].map(([name, role, review]) => (
+                    <div key={name} className="rounded-[24px] border border-white/5 bg-[#161c24] p-6">
+                      <div className="mb-4 flex items-center justify-between">
+                        <div className="flex gap-1 text-[#aac7ff]">{Array.from({ length: 5 }).map((_, i) => <Star key={i} size={14} fill="currentColor" />)}</div>
+                        <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Verified</span>
+                      </div>
+                      <p className="text-sm leading-relaxed text-slate-300">"{review}"</p>
+                      <div className="mt-5">
+                        <div className="text-sm font-bold text-slate-100">{name}</div>
+                        <div className="text-xs text-slate-500">{role}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+
+          <div className="space-y-5">
+            {selectedTab !== 'reviews' &&
+              specifications.map(([label, value]) => (
+                <div key={label} className="flex items-center justify-between gap-6 border-b border-white/5 py-3">
+                  <span className="text-sm text-slate-400">{label}</span>
+                  <span className="text-sm font-bold text-slate-100">{value}</span>
+                </div>
+              ))}
+          </div>
+        </div>
+
+        <section className="mt-16 overflow-hidden rounded-[34px] border border-white/5 bg-[radial-gradient(circle_at_top_right,rgba(55,116,173,0.18),transparent_30%),#151b23]">
+          <div className="grid grid-cols-1 gap-10 px-8 py-10 md:grid-cols-[0.85fr_1.15fr] md:px-10">
+            <div>
+              <span className="text-xs font-bold uppercase tracking-[0.32em] text-[#aac7ff]">Innovative Cooling</span>
+              <h2 className="mt-5 text-5xl font-black tracking-tighter text-slate-100">AI-Driven Thermal Management</h2>
+              <p className="mt-6 text-lg leading-relaxed text-slate-400">
+                The X-8000 monitors its own thermal signatures at 10,000 intervals per second. Our neural-mesh adjusts power delivery dynamically, ensuring you hit peak performance without the thermal throttle common in standard high-performance chips.
+              </p>
+              <button type="button" className="mt-8 inline-flex items-center gap-3 text-sm font-bold text-[#b9d1ff]">
+                Learn about Havtel Mesh Technology <ArrowRight size={16} />
+              </button>
+            </div>
+            <div className="min-h-[320px] rounded-[28px] bg-[radial-gradient(circle_at_center,rgba(77,147,247,0.22),transparent_30%),linear-gradient(135deg,#10161f,#0b1016)]"></div>
+          </div>
+        </section>
+
+        <section className="mt-20">
+          <div className="mb-8 flex items-center justify-between">
+            <h2 className="text-4xl font-black tracking-tight text-slate-100">Complete Your Build</h2>
+          </div>
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
+            {relatedProducts.map((related) => (
+              <button
+                key={related.id}
+                type="button"
+                onClick={() => onProductSelect(related.id)}
+                className="rounded-[24px] border border-white/5 bg-[#161c24] p-5 text-left transition-all hover:border-[#aac7ff]/30"
+              >
+                <div className="aspect-square overflow-hidden rounded-2xl bg-[#0b1016]">
+                  <img src={related.img} alt={related.name} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                </div>
+                <h3 className="mt-4 text-lg font-bold text-slate-100">{related.name}</h3>
+                <p className="mt-1 text-xs uppercase tracking-[0.18em] text-slate-500">{related.series}</p>
+                <div className="mt-4 flex items-center justify-between">
+                  <span className="text-lg font-black text-slate-100">{related.priceString}</span>
+                  <span className="rounded-lg bg-white/5 px-3 py-2 text-xs font-bold text-[#aac7ff]">View</span>
+                </div>
+              </button>
+            ))}
+          </div>
+        </section>
+      </section>
+    </motion.div>
+  );
+}
+
+function NotFoundView({ onGoHome }: { onGoHome: () => void; key?: string }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="pt-20 min-h-screen bg-[#0f141b]"
+    >
+      <section className="relative overflow-hidden px-8 py-24 md:px-16 md:py-32">
+        <div className="absolute inset-0">
+          <div className="absolute left-[-10%] top-[10%] h-[420px] w-[420px] rounded-full bg-[#aac7ff]/10 blur-[130px]"></div>
+          <div className="absolute right-[-8%] bottom-[10%] h-[360px] w-[360px] rounded-full bg-[#3e90ff]/8 blur-[110px]"></div>
+        </div>
+
+        <div className="relative z-10 mx-auto max-w-5xl">
+          <span className="mb-6 block text-xs font-bold uppercase tracking-[0.34em] text-[#aac7ff]">Error State</span>
+          <div className="text-[7rem] font-black leading-none tracking-tighter text-[#d8e7ff] md:text-[10rem]">404</div>
+          <h1 className="mt-6 text-5xl font-black tracking-tighter text-slate-100 md:text-7xl">Page Not Found</h1>
+          <p className="mt-8 max-w-3xl text-xl leading-relaxed text-slate-400 md:text-2xl">
+            The destination you requested does not exist in the current Havtel interface, or the route has not been configured yet.
+          </p>
+
+          <div className="mt-12 flex flex-col gap-4 sm:flex-row">
+            <button
+              type="button"
+              onClick={onGoHome}
+              className="rounded-[22px] bg-gradient-to-r from-[#a9c7ff] to-[#4d93f7] px-10 py-6 text-xl font-bold text-[#03192f] shadow-[0_24px_60px_rgba(77,147,247,0.35)]"
+            >
+              Return Home
+            </button>
+            <button
+              type="button"
+              onClick={() => window.location.hash = ''}
+              className="rounded-[22px] border border-white/10 px-10 py-6 text-xl font-bold text-[#b9d1ff] transition-colors hover:bg-white/5"
+            >
+              Clear Hash
+            </button>
+          </div>
+
+          <div className="mt-16 grid grid-cols-1 gap-6 md:grid-cols-3">
+            {[
+              ['Go to Shop', 'Browse the available hardware catalog and continue exploring the storefront.'],
+              ['Use Account Center', 'Review saved contacts, personal information, and historical orders.'],
+              ['Resume Checkout', 'Jump back into your current cart, shipping, payment, or review flow.'],
+            ].map(([title, description]) => (
+              <div key={title} className="rounded-[26px] border border-white/5 bg-[#161c24] p-6">
+                <h2 className="text-2xl font-bold tracking-tight text-slate-100">{title}</h2>
+                <p className="mt-3 text-slate-400 leading-relaxed">{description}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+    </motion.div>
+  );
+}
+
+function Home({ onShopClick, onProductSelect }: { onShopClick: () => void; onProductSelect: (productId: number) => void; key?: string }) {
   return (
     <motion.div 
       initial={{ opacity: 0 }}
@@ -375,7 +2245,11 @@ function Home({ onShopClick }: { onShopClick: () => void; key?: string }) {
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
           {PRODUCTS.slice(0, 4).map((prod) => (
-            <div key={prod.id} className="bg-[#1c2025]/50 border border-white/5 rounded-2xl overflow-hidden group hover:border-[#aac7ff]/30 transition-all">
+            <div
+              key={prod.id}
+              onClick={() => onProductSelect(prod.id)}
+              className="bg-[#1c2025]/50 border border-white/5 rounded-2xl overflow-hidden group hover:border-[#aac7ff]/30 transition-all cursor-pointer"
+            >
               <div className="aspect-square relative overflow-hidden bg-[#0a0e13]">
                 <img 
                   src={prod.img} 
@@ -389,7 +2263,13 @@ function Home({ onShopClick }: { onShopClick: () => void; key?: string }) {
                 <h3 className="text-lg font-bold text-slate-100 mb-6">{prod.name}</h3>
                 <div className="flex justify-between items-center">
                   <span className="text-lg font-black text-slate-100">{prod.priceString}</span>
-                  <button onClick={onShopClick} className="p-2 bg-white/5 rounded-lg text-slate-400 hover:bg-[#aac7ff] hover:text-[#003064] transition-all">
+                  <button
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onProductSelect(prod.id);
+                    }}
+                    className="p-2 bg-white/5 rounded-lg text-slate-400 hover:bg-[#aac7ff] hover:text-[#003064] transition-all"
+                  >
                     <ShoppingCart size={16} />
                   </button>
                 </div>
@@ -440,7 +2320,7 @@ function Home({ onShopClick }: { onShopClick: () => void; key?: string }) {
   );
 }
 
-function Shop({ onAddToCart }: { onAddToCart: (name: string) => void; key?: string }) {
+function Shop({ onAddToCart, onProductSelect }: { onAddToCart: (name: string) => void; onProductSelect: (productId: number) => void; key?: string }) {
   const [activeCategory, setActiveCategory] = useState('PROCESSORS');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('Popularity');
@@ -602,7 +2482,11 @@ function Shop({ onAddToCart }: { onAddToCart: (name: string) => void; key?: stri
         {filteredProducts.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-12">
             {filteredProducts.map((prod) => (
-              <div key={prod.id} className="bg-[#1c2025]/50 border border-white/5 rounded-2xl overflow-hidden group hover:border-[#aac7ff]/30 transition-all">
+              <div
+                key={prod.id}
+                onClick={() => onProductSelect(prod.id)}
+                className="bg-[#1c2025]/50 border border-white/5 rounded-2xl overflow-hidden group hover:border-[#aac7ff]/30 transition-all cursor-pointer"
+              >
                 <div className="aspect-square relative overflow-hidden bg-[#0a0e13]">
                   {prod.tag && (
                     <span className={`absolute top-4 right-4 z-10 px-3 py-1 rounded-full text-[10px] font-black tracking-widest ${
@@ -624,7 +2508,10 @@ function Shop({ onAddToCart }: { onAddToCart: (name: string) => void; key?: stri
                   <div className="flex justify-between items-center">
                     <span className="text-lg font-black text-slate-100">{prod.priceString}</span>
                     <button 
-                      onClick={() => onAddToCart(prod.name)}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onAddToCart(prod.name);
+                      }}
                       className="p-2 bg-white/5 rounded-lg text-slate-400 hover:bg-[#aac7ff] hover:text-[#003064] transition-all"
                     >
                       <ShoppingCart size={16} />
