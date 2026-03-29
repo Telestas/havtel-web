@@ -39,6 +39,7 @@ import {
   Send
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { ApiError, type AuthResponse, loginRequest, registerRequest } from './lib/api';
 
 type View = 'home' | 'shop' | 'support' | 'account' | 'orders' | 'cart' | 'shipping' | 'payment' | 'review' | 'confirmed' | 'tracking' | 'product' | 'notfound' | 'login' | 'signup' | 'forgot';
 
@@ -60,6 +61,10 @@ interface CartItem {
   variant: string;
 }
 
+type AuthSession = AuthResponse | null;
+
+const AUTH_STORAGE_KEY = 'havtel.auth.session';
+
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
 
@@ -78,7 +83,9 @@ export default function App() {
   const [view, setView] = useState<View>('home');
   const [selectedProductId, setSelectedProductId] = useState<number>(1);
   const [notification, setNotification] = useState<string | null>(null);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authSession, setAuthSession] = useState<AuthSession>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [isAuthSubmitting, setIsAuthSubmitting] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement | null>(null);
   const [cartItems, setCartItems] = useState<CartItem[]>([
@@ -87,6 +94,7 @@ export default function App() {
     { productId: 8, quantity: 2, variant: 'Titanium Slate | Precision Switches' },
   ]);
   const [shippingMethod, setShippingMethod] = useState<'priority' | 'express'>('priority');
+  const isAuthenticated = authSession !== null;
 
   const cartCount = cartItems.reduce((total, item) => total + item.quantity, 0);
   const isCheckoutView =
@@ -126,6 +134,21 @@ export default function App() {
   };
 
   useEffect(() => {
+    const storedSession = window.localStorage.getItem(AUTH_STORAGE_KEY);
+
+    if (!storedSession) {
+      return;
+    }
+
+    try {
+      const parsedSession = JSON.parse(storedSession) as AuthResponse;
+      setAuthSession(parsedSession);
+    } catch {
+      window.localStorage.removeItem(AUTH_STORAGE_KEY);
+    }
+  }, []);
+
+  useEffect(() => {
     const handlePointerDown = (event: MouseEvent) => {
       if (!userMenuRef.current?.contains(event.target as Node)) {
         setIsUserMenuOpen(false);
@@ -161,6 +184,51 @@ export default function App() {
       window.removeEventListener('hashchange', syncHashView);
     };
   }, []);
+
+  const persistSession = (session: AuthResponse | null) => {
+    setAuthSession(session);
+
+    if (session) {
+      window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(session));
+      return;
+    }
+
+    window.localStorage.removeItem(AUTH_STORAGE_KEY);
+  };
+
+  const handleLogin = async (payload: { email: string; password: string }) => {
+    setIsAuthSubmitting(true);
+    setAuthError(null);
+
+    try {
+      const session = await loginRequest(payload);
+      persistSession(session);
+      setView('account');
+    } catch (error) {
+      setAuthError(error instanceof ApiError ? error.message : 'Unable to sign in right now.');
+    } finally {
+      setIsAuthSubmitting(false);
+    }
+  };
+
+  const handleSignup = async (payload: { firstName: string; lastName: string; email: string; password: string }) => {
+    setIsAuthSubmitting(true);
+    setAuthError(null);
+
+    try {
+      const session = await registerRequest({
+        email: payload.email,
+        password: payload.password,
+        full_name: `${payload.firstName} ${payload.lastName}`.trim(),
+      });
+      persistSession(session);
+      setView('account');
+    } catch (error) {
+      setAuthError(error instanceof ApiError ? error.message : 'Unable to create your account right now.');
+    } finally {
+      setIsAuthSubmitting(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[#101419] text-[#e0e2ea] font-sans selection:bg-[#aac7ff]/30 antialiased">
@@ -257,7 +325,8 @@ export default function App() {
                       type="button"
                       onClick={() => {
                         setView('home');
-                        setIsAuthenticated(false);
+                        persistSession(null);
+                        setAuthError(null);
                         setIsUserMenuOpen(false);
                       }}
                       className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-medium text-slate-200 transition-colors hover:bg-white/6 hover:text-white"
@@ -302,23 +371,27 @@ export default function App() {
         ) : view === 'login' ? (
           <AuthLoginView
             key="login"
-            onLogin={() => {
-              setIsAuthenticated(true);
-              setView('account');
-            }}
+            onLogin={handleLogin}
+            errorMessage={authError}
+            isSubmitting={isAuthSubmitting}
             onGoHome={() => setView('home')}
-            onGoToSignup={() => setView('signup')}
+            onGoToSignup={() => {
+              setAuthError(null);
+              setView('signup');
+            }}
             onGoToForgot={() => setView('forgot')}
           />
         ) : view === 'signup' ? (
           <AuthSignupView
             key="signup"
-            onSignup={() => {
-              setIsAuthenticated(true);
-              setView('account');
-            }}
+            onSignup={handleSignup}
+            errorMessage={authError}
+            isSubmitting={isAuthSubmitting}
             onGoHome={() => setView('home')}
-            onGoToLogin={() => setView('login')}
+            onGoToLogin={() => {
+              setAuthError(null);
+              setView('login');
+            }}
           />
         ) : view === 'forgot' ? (
           <AuthForgotView
@@ -2189,13 +2262,20 @@ function AuthLoginView({
   onGoHome,
   onGoToSignup,
   onGoToForgot,
+  errorMessage,
+  isSubmitting,
 }: {
-  onLogin: () => void;
+  onLogin: (payload: { email: string; password: string }) => Promise<void>;
   onGoHome: () => void;
   onGoToSignup: () => void;
   onGoToForgot: () => void;
+  errorMessage: string | null;
+  isSubmitting: boolean;
   key?: string;
 }) {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="pt-20 min-h-screen bg-[#0f141b]">
       <section className="relative overflow-hidden px-8 py-20 md:px-16">
@@ -2217,26 +2297,29 @@ function AuthLoginView({
           <div className="rounded-[32px] border border-white/5 bg-[#1b2129] p-8 shadow-[0_30px_80px_rgba(0,0,0,0.3)] md:p-10">
             <h2 className="text-4xl font-black tracking-tight text-slate-100">Login</h2>
             <form
-              onSubmit={(event) => {
+              onSubmit={async (event) => {
                 event.preventDefault();
-                onLogin();
+                await onLogin({ email, password });
               }}
               className="mt-8 space-y-6"
             >
               <label className="block">
                 <span className="mb-4 block text-sm font-bold uppercase tracking-[0.24em] text-slate-300">Email Address</span>
-                <input type="email" required placeholder="name@domain.tech" className="w-full rounded-2xl border border-white/5 bg-[#0b1016] px-6 py-5 text-xl text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-[#aac7ff]/40" />
+                <input type="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@domain.tech" className="w-full rounded-2xl border border-white/5 bg-[#0b1016] px-6 py-5 text-xl text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-[#aac7ff]/40" />
               </label>
               <label className="block">
                 <span className="mb-4 block text-sm font-bold uppercase tracking-[0.24em] text-slate-300">Password</span>
-                <input type="password" required placeholder="Enter your password" className="w-full rounded-2xl border border-white/5 bg-[#0b1016] px-6 py-5 text-xl text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-[#aac7ff]/40" />
+                <input type="password" required value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Enter your password" className="w-full rounded-2xl border border-white/5 bg-[#0b1016] px-6 py-5 text-xl text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-[#aac7ff]/40" />
               </label>
+              {errorMessage ? (
+                <p className="rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">{errorMessage}</p>
+              ) : null}
               <div className="flex items-center justify-between gap-4 text-sm">
                 <button type="button" onClick={onGoToForgot} className="font-bold text-[#b9d1ff] hover:text-white">Forgot password?</button>
                 <button type="button" onClick={onGoToSignup} className="font-bold text-slate-400 hover:text-white">Create account</button>
               </div>
-              <button type="submit" className="w-full rounded-[22px] bg-gradient-to-r from-[#a9c7ff] to-[#4d93f7] px-8 py-5 text-xl font-bold text-[#03192f] shadow-[0_24px_60px_rgba(77,147,247,0.35)]">
-                Sign In
+              <button type="submit" disabled={isSubmitting} className="w-full rounded-[22px] bg-gradient-to-r from-[#a9c7ff] to-[#4d93f7] px-8 py-5 text-xl font-bold text-[#03192f] shadow-[0_24px_60px_rgba(77,147,247,0.35)] disabled:cursor-not-allowed disabled:opacity-70">
+                {isSubmitting ? 'Signing In...' : 'Sign In'}
               </button>
             </form>
           </div>
@@ -2250,12 +2333,21 @@ function AuthSignupView({
   onSignup,
   onGoHome,
   onGoToLogin,
+  errorMessage,
+  isSubmitting,
 }: {
-  onSignup: () => void;
+  onSignup: (payload: { firstName: string; lastName: string; email: string; password: string }) => Promise<void>;
   onGoHome: () => void;
   onGoToLogin: () => void;
+  errorMessage: string | null;
+  isSubmitting: boolean;
   key?: string;
 }) {
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="pt-20 min-h-screen bg-[#0f141b]">
       <section className="relative overflow-hidden px-8 py-20 md:px-16">
@@ -2277,18 +2369,21 @@ function AuthSignupView({
           <div className="rounded-[32px] border border-white/5 bg-[#1b2129] p-8 shadow-[0_30px_80px_rgba(0,0,0,0.3)] md:p-10">
             <h2 className="text-4xl font-black tracking-tight text-slate-100">Sign Up</h2>
             <form
-              onSubmit={(event) => {
+              onSubmit={async (event) => {
                 event.preventDefault();
-                onSignup();
+                await onSignup({ firstName, lastName, email, password });
               }}
               className="mt-8 grid grid-cols-1 gap-6"
             >
-              <input required placeholder="First name" className="w-full rounded-2xl border border-white/5 bg-[#0b1016] px-6 py-5 text-xl text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-[#aac7ff]/40" />
-              <input required placeholder="Last name" className="w-full rounded-2xl border border-white/5 bg-[#0b1016] px-6 py-5 text-xl text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-[#aac7ff]/40" />
-              <input required type="email" placeholder="Email address" className="w-full rounded-2xl border border-white/5 bg-[#0b1016] px-6 py-5 text-xl text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-[#aac7ff]/40" />
-              <input required type="password" placeholder="Create password" className="w-full rounded-2xl border border-white/5 bg-[#0b1016] px-6 py-5 text-xl text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-[#aac7ff]/40" />
-              <button type="submit" className="w-full rounded-[22px] bg-gradient-to-r from-[#a9c7ff] to-[#4d93f7] px-8 py-5 text-xl font-bold text-[#03192f] shadow-[0_24px_60px_rgba(77,147,247,0.35)]">
-                Create Account
+              <input required value={firstName} onChange={(event) => setFirstName(event.target.value)} placeholder="First name" className="w-full rounded-2xl border border-white/5 bg-[#0b1016] px-6 py-5 text-xl text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-[#aac7ff]/40" />
+              <input required value={lastName} onChange={(event) => setLastName(event.target.value)} placeholder="Last name" className="w-full rounded-2xl border border-white/5 bg-[#0b1016] px-6 py-5 text-xl text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-[#aac7ff]/40" />
+              <input required type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="Email address" className="w-full rounded-2xl border border-white/5 bg-[#0b1016] px-6 py-5 text-xl text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-[#aac7ff]/40" />
+              <input required type="password" minLength={8} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Create password" className="w-full rounded-2xl border border-white/5 bg-[#0b1016] px-6 py-5 text-xl text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-[#aac7ff]/40" />
+              {errorMessage ? (
+                <p className="rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">{errorMessage}</p>
+              ) : null}
+              <button type="submit" disabled={isSubmitting} className="w-full rounded-[22px] bg-gradient-to-r from-[#a9c7ff] to-[#4d93f7] px-8 py-5 text-xl font-bold text-[#03192f] shadow-[0_24px_60px_rgba(77,147,247,0.35)] disabled:cursor-not-allowed disabled:opacity-70">
+                {isSubmitting ? 'Creating Account...' : 'Create Account'}
               </button>
               <button type="button" onClick={onGoToLogin} className="text-sm font-bold text-[#b9d1ff] hover:text-white">
                 Already have an account? Sign in
