@@ -3,6 +3,7 @@ import {
   ShoppingCart, 
   User, 
   CircleUserRound,
+  Building2,
   Check,
   ArrowRight, 
   ChevronRight, 
@@ -36,10 +37,28 @@ import {
   ChevronLeft,
   Package,
   LogOut,
-  Send
+  Send,
+  MapPinned
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ApiError, type AuthResponse, loginRequest, registerRequest } from './lib/api';
+import {
+  ApiError,
+  type AuthResponse,
+  type Order,
+  type UserAddress,
+  createOrderRequest,
+  createUserAddressRequest,
+  deleteUserAddressRequest,
+  getOrderRequest,
+  getCurrentUserRequest,
+  listOrdersRequest,
+  listUserAddressesRequest,
+  loginRequest,
+  registerRequest,
+  setDefaultUserAddressRequest,
+  updateCurrentUserRequest,
+  updateUserAddressRequest,
+} from './lib/api';
 
 type View = 'home' | 'shop' | 'support' | 'account' | 'orders' | 'cart' | 'shipping' | 'payment' | 'review' | 'confirmed' | 'tracking' | 'product' | 'notfound' | 'login' | 'signup' | 'forgot';
 
@@ -61,22 +80,47 @@ interface CartItem {
   variant: string;
 }
 
+type CheckoutShippingAddress = {
+  email: string;
+  phone: string;
+  firstName: string;
+  lastName: string;
+  street: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  country: string;
+};
+
 type AuthSession = AuthResponse | null;
 
 const AUTH_STORAGE_KEY = 'havtel.auth.session';
+
+const splitFullName = (fullName: string) => {
+  const trimmedName = fullName.trim();
+  if (!trimmedName) {
+    return { firstName: '', lastName: '' };
+  }
+
+  const parts = trimmedName.split(/\s+/);
+  return {
+    firstName: parts[0] ?? '',
+    lastName: parts.slice(1).join(' '),
+  };
+};
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
 
 const PRODUCTS: Product[] = [
-  { id: 1, name: "Quantum X-8000", series: "HAVTEL CORE", price: 799, priceString: "$799.00", tag: "IN STOCK", img: "https://lh3.googleusercontent.com/aida-public/AB6AXuDp0KEdaGdGbkMYURtpl7ALxvrwOa4iLj3c8O4D8gHYYqUnkrad2_dtvDBKrCUH43eXN3bz0_UFSZnOp5yUlfvoWIDcyOve3usV2EcMerkkx1DcRmLscU3gcymcCTrcnNf5Pu9NYTZIgVho6mLrI4aI9ty5EAVVbkt14bT__UjoJMteub1sv_sK9hsm-vIN-pkFErL7mOMYatN1aLahjQxMdn0xsAVFeLNBga_s6IDgH9XzobThpSwOeSB0osXssqyTKoiNDQ9LcrKM", category: "PROCESSORS", brand: "Havtel Core" },
-  { id: 2, name: "Omni-Board V2", series: "TITAN SERIES", price: 450, priceString: "$450.00", tag: null, img: "https://lh3.googleusercontent.com/aida-public/AB6AXuAKGTECuD0CaVI9MaPpUsO-MchWsoDRbjPoAeS02V1-VfsRn3-cXfICGfqICxtOcZfR9rTuMCGzhOiDOounNof4qLEwSSkeBjYUmnc2CaNDyPE3Q9uQF9EPNCGlXe1OAWhtBg7vMSC7bLkRLdmj0atUVaweB4oLKWagBzHJToW9URUUjMZ90w_iG-iH4F9sKKPb0L9_Ujxmts1mKzgZ6L5GXw7PYlzZvuJqFf3_NUAmrGFCk8dA1VE4O-W14pJVw0hxh2BLX6k11MKd", category: "PROCESSORS", brand: "Titan Series" },
-  { id: 3, name: "Aether G-Force RTX", series: "AETHER TECH", price: 1299, priceString: "$1,299.00", tag: "LIMITED", img: "https://lh3.googleusercontent.com/aida-public/AB6AXuAcuB_UEL0socYjiXJrmJfjieRWPCENBYpqcvEdmp1ruY7rpY0dHupkPIlUDD3JL2q4NjcLSaF2EuVBr22h89qTN0UzE7S_RvpXA6STywJ1Pp6gDRY8ShPRuCmcDLK71ctSO2eNO6KVCwpMVA1ByjmEIyUqMdxVGASvY1GSmXQKBb4wiGN9yMlvRqI-qgvoSluZAaSsDqn1yqhWYMYw1iDOiXrkwmaGhWCkQdET-FFXVenC-x5S1J_K4GV25sl4z3fRAYfJBzdJpTZl", category: "GRAPHICS", brand: "Aether Tech" },
-  { id: 4, name: "Hyper-Pulse DDR5", series: "HAVTEL CORE", price: 215, priceString: "$215.00", tag: null, img: "https://lh3.googleusercontent.com/aida-public/AB6AXuCFdZRDgwUS5nKcimTjlsRKUe3kIBzmTQMNm6X2QdFI6JqOrWlso3geYu1kV5UKzsto5tCIdqEuYJeUEcl0bqD2JHXCH_hCDJ6ACsgGo1TzeuAKcR5BU9K3bkScipCQvki4QMt83a9XmX6DfKnVdP-fgC6A-owmF7Jx1dP1zpNFOYiWj8sfwAf-uMK745L70qKNojQDxbMS6z-GUyAnmn6td9TC_vMaDYf1DYR32cckwHFDDH0OovQQdJbcRP-cY5aEWIE8gtX2vYFi", category: "MEMORY", brand: "Havtel Core" },
-  { id: 5, name: "Quantum Lite-Z", series: "HAVTEL CORE", price: 349, priceString: "$349.00", tag: null, img: "https://lh3.googleusercontent.com/aida-public/AB6AXuAfy9AEiXSt8ticdcUrVyztADCQkhnmK0k04QXZDGHnIrf5K_PiaIyCVELrLsQ4y53Yj4Wq4tmIUgpxQUmdNJRN63VDjdICN2Kj1oWwBHLDeqWBquMYWoPVy_eAzf6UWgRt4PmRgEaY_dE_YatBWeMDUykhqtUHgmNN9_epg2Jmz8rn4FIeFlNR_w5EHMGK9BHHF8rsNiZp8vUOBV870uLdVcdzRMU8pCS_Jcs-hkT55CYISxoUe8enKv3wUnEx2Xa27E1wc9aTCwoM", category: "PROCESSORS", brand: "Havtel Core" },
-  { id: 6, name: "Frost-Bite Cooler", series: "TITAN SERIES", price: 125, priceString: "$125.00", tag: null, img: "https://lh3.googleusercontent.com/aida-public/AB6AXuAKGTECuD0CaVI9MaPpUsO-MchWsoDRbjPoAeS02V1-VfsRn3-cXfICGfqICxtOcZfR9rTuMCGzhOiDOounNof4qLEwSSkeBjYUmnc2CaNDyPE3Q9uQF9EPNCGlXe1OAWhtBg7vMSC7bLkRLdmj0atUVaweB4oLKWagBzHJToW9URUUjMZ90w_iG-iH4F9sKKPb0L9_Ujxmts1mKzgZ6L5GXw7PYlzZvuJqFf3_NUAmrGFCk8dA1VE4O-W14pJVw0hxh2BLX6k11MKd", category: "PERIPHERALS", brand: "Titan Series" },
-  { id: 7, name: "Aether NVMe 4TB", series: "AETHER TECH", price: 580, priceString: "$580.00", tag: null, img: "https://lh3.googleusercontent.com/aida-public/AB6AXuCNurIX-nFpwLYqp9-2Gaoi1L74qYjYacZf2VNl98eQb7URYLloYdWLZq5amj55iRWRV33DBbtrABuQw3ga1MZfW2wSP2iQWJF53gSdACxc1aSoaSCqR-l4pI0XCcMqwYx8PKgGuya9ov7w_0URDkBa2LmpCHO6FCNxpHHPYtGUqxBycPlsrrPtgEEZ2GjuegCmbf0gN6lxb5wl84WHelZl_gB4kPnUjp0sGfgoVZhn71v4UvJDHmgOdiKKQPM-sGrrrJVN_qPunQxZ", category: "STORAGE", brand: "Aether Tech" },
-  { id: 8, name: "Mechanical Elite X", series: "TITAN SERIES", price: 210, priceString: "$210.00", tag: null, img: "https://lh3.googleusercontent.com/aida-public/AB6AXuApXUDZkueOvrnbiWh7wNIHjF7YluGpyA_ScedqgBw4j2Luxm6kXkVCQM8knT6qI-0LNezAoOJRaoSdPa3tPpQxCmJUoeisiD8MlHfZ1E-YFsFyywRWCjLyyV-kP9Q5d_XoVr0h5vBpQ1iIkMbvvfAfnxvQHUcXz5ADkzJGlgFBDTTyro8RkH7OBQgpIphrrq0visdFfuipYsf7y365wHMGCt7BDvThmqbioUg5en_-sLc86eCngtUBrSJXOqPY9_mo9wypuWyznpqY", category: "PERIPHERALS", brand: "Titan Series" }
+  { id: 1, name: "Quantum X-8000", series: "HAVTEL CORE", price: 799, priceString: "$799.00", tag: "IN STOCK", img: "/products/quantum-x-8000.jpg", category: "PROCESSORS", brand: "Havtel Core" },
+  { id: 2, name: "Omni-Board V2", series: "TITAN SERIES", price: 450, priceString: "$450.00", tag: null, img: "/products/omni-board-v2.jpg", category: "PROCESSORS", brand: "Titan Series" },
+  { id: 3, name: "Aether G-Force RTX", series: "AETHER TECH", price: 1299, priceString: "$1,299.00", tag: "LIMITED", img: "/products/aether-g-force-rtx.jpg", category: "GRAPHICS", brand: "Aether Tech" },
+  { id: 4, name: "Hyper-Pulse DDR5", series: "HAVTEL CORE", price: 215, priceString: "$215.00", tag: null, img: "/products/hyper-pulse-ddr5.jpg", category: "MEMORY", brand: "Havtel Core" },
+  { id: 5, name: "Quantum Lite-Z", series: "HAVTEL CORE", price: 349, priceString: "$349.00", tag: null, img: "/products/quantum-lite-z.jpg", category: "PROCESSORS", brand: "Havtel Core" },
+  { id: 6, name: "Frost-Bite Cooler", series: "TITAN SERIES", price: 125, priceString: "$125.00", tag: null, img: "/products/frost-bite-cooler.jpg", category: "PERIPHERALS", brand: "Titan Series" },
+  { id: 7, name: "Aether NVMe 4TB", series: "AETHER TECH", price: 580, priceString: "$580.00", tag: null, img: "/products/aether-nvme-4tb.jpg", category: "STORAGE", brand: "Aether Tech" },
+  { id: 8, name: "Mechanical Elite X", series: "TITAN SERIES", price: 210, priceString: "$210.00", tag: null, img: "/products/mechanical-elite-x.jpg", category: "PERIPHERALS", brand: "Titan Series" }
 ];
 
 export default function App() {
@@ -94,6 +138,9 @@ export default function App() {
     { productId: 8, quantity: 2, variant: 'Titanium Slate | Precision Switches' },
   ]);
   const [shippingMethod, setShippingMethod] = useState<'priority' | 'express'>('priority');
+  const [checkoutShippingAddress, setCheckoutShippingAddress] = useState<CheckoutShippingAddress | null>(null);
+  const [latestOrder, setLatestOrder] = useState<Order | null>(null);
+  const [trackedOrderId, setTrackedOrderId] = useState<string | null>(null);
   const isAuthenticated = authSession !== null;
 
   const cartCount = cartItems.reduce((total, item) => total + item.quantity, 0);
@@ -133,6 +180,16 @@ export default function App() {
     setView('product');
   };
 
+  const requireAuthForView = (nextView: View) => {
+    if (isAuthenticated) {
+      setView(nextView);
+      return;
+    }
+
+    setAuthError('Please sign in before continuing to checkout.');
+    setView('login');
+  };
+
   useEffect(() => {
     const storedSession = window.localStorage.getItem(AUTH_STORAGE_KEY);
 
@@ -147,6 +204,42 @@ export default function App() {
       window.localStorage.removeItem(AUTH_STORAGE_KEY);
     }
   }, []);
+
+  useEffect(() => {
+    if (!authSession?.access_token) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const syncCurrentUser = async () => {
+      try {
+        const user = await getCurrentUserRequest(authSession.access_token);
+        if (cancelled) {
+          return;
+        }
+
+        persistSession({
+          ...authSession,
+          user,
+        });
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        if (error instanceof ApiError && error.status === 401) {
+          persistSession(null);
+        }
+      }
+    };
+
+    void syncCurrentUser();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authSession?.access_token]);
 
   useEffect(() => {
     const handlePointerDown = (event: MouseEvent) => {
@@ -211,15 +304,28 @@ export default function App() {
     }
   };
 
-  const handleSignup = async (payload: { firstName: string; lastName: string; email: string; password: string }) => {
+  const handleSignup = async (payload: {
+    accountType: 'b2c' | 'b2b';
+    firstName: string;
+    lastName: string;
+    companyName: string;
+    email: string;
+    password: string;
+  }) => {
     setIsAuthSubmitting(true);
     setAuthError(null);
 
     try {
+      const fullName =
+        payload.accountType === 'b2b'
+          ? payload.companyName.trim()
+          : `${payload.firstName} ${payload.lastName}`.trim();
+
       const session = await registerRequest({
         email: payload.email,
         password: payload.password,
-        full_name: `${payload.firstName} ${payload.lastName}`.trim(),
+        full_name: fullName,
+        customer_type: payload.accountType,
       });
       persistSession(session);
       setView('account');
@@ -227,6 +333,67 @@ export default function App() {
       setAuthError(error instanceof ApiError ? error.message : 'Unable to create your account right now.');
     } finally {
       setIsAuthSubmitting(false);
+    }
+  };
+
+  const handlePlaceOrder = async () => {
+    if (!authSession?.access_token || !checkoutShippingAddress) {
+      setAuthError('Please complete your shipping information before placing the order.');
+      setView('shipping');
+      return;
+    }
+
+    const subtotal = cartItems.reduce((sum, item) => {
+      const product = PRODUCTS.find((entry) => entry.id === item.productId);
+      return sum + (product?.price ?? 0) * item.quantity;
+    }, 0);
+    const shippingAmount = shippingMethod === 'priority' ? 12 : 35;
+    const taxAmount = subtotal * 0.0825;
+    const totalAmount = subtotal + shippingAmount + taxAmount;
+
+    try {
+      const order = await createOrderRequest(authSession.access_token, {
+        payment_type: 'Credit Card',
+        shipping_method: shippingMethod,
+        shipping_amount: shippingAmount,
+        tax_amount: taxAmount,
+        subtotal_amount: subtotal,
+        total_amount: totalAmount,
+        shipping_address: {
+          contact_name: `${checkoutShippingAddress.firstName} ${checkoutShippingAddress.lastName}`.trim(),
+          email: checkoutShippingAddress.email,
+          phone: checkoutShippingAddress.phone,
+          street: checkoutShippingAddress.street,
+          city: checkoutShippingAddress.city,
+          state: checkoutShippingAddress.state,
+          postal_code: checkoutShippingAddress.postalCode,
+          country: checkoutShippingAddress.country,
+        },
+        items: cartItems
+          .map((item) => {
+            const product = PRODUCTS.find((entry) => entry.id === item.productId);
+            if (!product) {
+              return null;
+            }
+
+            return {
+              product_name: product.name,
+              variant_name: item.variant,
+              unit_price: product.price,
+              quantity: item.quantity,
+              product_image_url: product.img,
+            };
+          })
+          .filter((item): item is NonNullable<typeof item> => item !== null),
+      });
+
+      setLatestOrder(order);
+      setTrackedOrderId(order.id);
+      setCartItems([]);
+      setView('confirmed');
+    } catch (error) {
+      setAuthError(error instanceof ApiError ? error.message : 'Unable to place your order right now.');
+      setView('review');
     }
   };
 
@@ -417,26 +584,29 @@ export default function App() {
             shippingMethod={shippingMethod}
             onClose={() => setView('home')}
             onGoHome={() => setView('home')}
-            onBackToShipping={() => setView('shipping')}
-            onBackToCart={() => setView('cart')}
-            onProceedToReview={() => setView('review')}
+            onBackToShipping={() => requireAuthForView('shipping')}
+            onBackToCart={() => requireAuthForView('cart')}
+            onProceedToReview={() => requireAuthForView('review')}
           />
         ) : view === 'review' ? (
           <ReviewView
             key="review"
             cartItems={cartItems}
+            checkoutShippingAddress={checkoutShippingAddress}
             shippingMethod={shippingMethod}
             onClose={() => setView('home')}
             onGoHome={() => setView('home')}
-            onBackToPayment={() => setView('payment')}
-            onBackToShipping={() => setView('shipping')}
-            onBackToCart={() => setView('cart')}
-            onPlaceOrder={() => setView('confirmed')}
+            onBackToPayment={() => requireAuthForView('payment')}
+            onBackToShipping={() => requireAuthForView('shipping')}
+            onBackToCart={() => requireAuthForView('cart')}
+            onPlaceOrder={handlePlaceOrder}
           />
         ) : view === 'tracking' ? (
           <TrackOrderView
             key="tracking"
+            authSession={authSession}
             cartItems={cartItems}
+            trackedOrderId={trackedOrderId}
             shippingMethod={shippingMethod}
             onClose={() => setView('home')}
             onGoHome={() => setView('home')}
@@ -447,22 +617,32 @@ export default function App() {
           <OrderConfirmedView
             key="confirmed"
             cartItems={cartItems}
+            order={latestOrder}
+            checkoutShippingAddress={checkoutShippingAddress}
             shippingMethod={shippingMethod}
             onClose={() => setView('home')}
             onGoHome={() => setView('home')}
-            onTrackOrder={() => setView('tracking')}
+            onTrackOrder={() => {
+              if (latestOrder) {
+                setTrackedOrderId(latestOrder.id);
+              }
+              setView('tracking');
+            }}
             onContinueShopping={() => setView('shop')}
           />
         ) : view === 'shipping' ? (
           <ShippingView
             key="shipping"
+            authSession={authSession}
             cartItems={cartItems}
+            checkoutShippingAddress={checkoutShippingAddress}
             shippingMethod={shippingMethod}
+            onShippingAddressChange={setCheckoutShippingAddress}
             onShippingMethodChange={setShippingMethod}
             onClose={() => setView('home')}
             onGoHome={() => setView('home')}
-            onBackToCart={() => setView('cart')}
-            onProceedToPayment={() => setView('payment')}
+            onBackToCart={() => requireAuthForView('cart')}
+            onProceedToPayment={() => requireAuthForView('payment')}
           />
         ) : view === 'cart' ? (
           <ShoppingBagView
@@ -470,7 +650,7 @@ export default function App() {
             cartItems={cartItems}
             onClose={() => setView('home')}
             onGoHome={() => setView('home')}
-            onProceedToShipping={() => setView('shipping')}
+            onProceedToShipping={() => requireAuthForView('shipping')}
             onDecreaseQuantity={(productId) =>
               setCartItems((prev) =>
                 prev.flatMap((item) => {
@@ -492,9 +672,24 @@ export default function App() {
             }
           />
         ) : view === 'orders' ? (
-          <OrderHistory key="orders" onBackToAccount={() => setView('account')} onGoHome={() => setView('home')} />
+          <OrderHistory
+            key="orders"
+            authSession={authSession}
+            onBackToAccount={() => setView('account')}
+            onGoHome={() => setView('home')}
+            onTrackOrder={(orderId) => {
+              setTrackedOrderId(orderId);
+              setView('tracking');
+            }}
+          />
         ) : view === 'account' ? (
-          <Account key="account" onExit={() => setView('home')} onOpenOrders={() => setView('orders')} />
+          <Account
+            key="account"
+            authSession={authSession}
+            onExit={() => setView('home')}
+            onOpenOrders={() => setView('orders')}
+            onSessionUpdate={persistSession}
+          />
         ) : (
           <Support key="support" />
         )}
@@ -796,16 +991,22 @@ function ShoppingBagView({
 }
 
 function ShippingView({
+  authSession,
   cartItems,
+  checkoutShippingAddress,
   shippingMethod,
+  onShippingAddressChange,
   onShippingMethodChange,
   onClose,
   onGoHome,
   onBackToCart,
   onProceedToPayment,
 }: {
+  authSession: AuthSession;
   cartItems: CartItem[];
+  checkoutShippingAddress: CheckoutShippingAddress | null;
   shippingMethod: 'priority' | 'express';
+  onShippingAddressChange: (address: CheckoutShippingAddress) => void;
   onShippingMethodChange: (method: 'priority' | 'express') => void;
   onClose: () => void;
   onGoHome: () => void;
@@ -824,6 +1025,96 @@ function ShippingView({
     ? PRODUCTS.find((entry) => entry.id === cartItems[0].productId)
     : null;
   const summaryVariant = cartItems[0]?.variant ?? 'Configured order';
+  const [savedAddresses, setSavedAddresses] = useState<UserAddress[]>([]);
+  const [isLoadingAddresses, setIsLoadingAddresses] = useState(false);
+  const [addressError, setAddressError] = useState<string | null>(null);
+  const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
+  const [shippingForm, setShippingForm] = useState<CheckoutShippingAddress>({
+    email: '',
+    phone: '',
+    firstName: '',
+    lastName: '',
+    street: '',
+    city: '',
+    state: '',
+    postalCode: '',
+    country: '',
+  });
+
+  const applyAddressToForm = (address: UserAddress) => {
+    const { firstName, lastName } = splitFullName(address.contact_name ?? '');
+    setSelectedAddressId(address.id);
+    setShippingForm({
+      email: address.contact_email ?? authSession?.user.email ?? '',
+      phone: address.contact_phone ?? authSession?.user.phone ?? '',
+      firstName,
+      lastName,
+      street: address.street,
+      city: address.city,
+      state: address.state ?? '',
+      postalCode: address.zip_code ?? '',
+      country: address.country,
+    });
+  };
+
+  useEffect(() => {
+    if (checkoutShippingAddress) {
+      setShippingForm(checkoutShippingAddress);
+      return;
+    }
+
+    if (!authSession?.access_token) {
+      setSavedAddresses([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadAddresses = async () => {
+      setIsLoadingAddresses(true);
+      setAddressError(null);
+
+      try {
+        const addresses = await listUserAddressesRequest(authSession.access_token);
+        if (cancelled) {
+          return;
+        }
+
+        setSavedAddresses(addresses);
+        const preferredAddress = addresses.find((address) => address.is_default) ?? addresses[0];
+        if (preferredAddress) {
+          applyAddressToForm(preferredAddress);
+        } else {
+          const { firstName, lastName } = splitFullName(authSession.user.full_name);
+          setShippingForm({
+            email: authSession.user.email,
+            phone: authSession.user.phone ?? '',
+            firstName,
+            lastName,
+            street: '',
+            city: '',
+            state: '',
+            postalCode: '',
+            country: 'US',
+          });
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setAddressError(error instanceof ApiError ? error.message : 'Unable to load your saved shipping addresses.');
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoadingAddresses(false);
+        }
+      }
+    };
+
+    void loadAddresses();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authSession?.access_token, checkoutShippingAddress]);
 
   return (
     <motion.div
@@ -889,6 +1180,53 @@ function ShippingView({
             <form className="space-y-14">
               <div>
                 <div className="mb-8 flex items-center gap-4">
+                  <span className="inline-flex h-8 min-w-8 items-center justify-center rounded-lg bg-[#172131] px-2 text-xs font-black tracking-[0.2em] text-[#aac7ff]">00</span>
+                  <h2 className="text-4xl font-bold tracking-tight">Saved Addresses</h2>
+                </div>
+                {addressError ? (
+                  <p className="mb-6 rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">{addressError}</p>
+                ) : null}
+                {isLoadingAddresses ? (
+                  <div className="rounded-[24px] border border-white/5 bg-[#0b1016] p-6 text-slate-400">Loading saved addresses...</div>
+                ) : savedAddresses.length > 0 ? (
+                  <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                    {savedAddresses.map((address) => (
+                      <button
+                        key={address.id}
+                        type="button"
+                        onClick={() => applyAddressToForm(address)}
+                        className={`rounded-[24px] border p-6 text-left transition-all ${
+                          selectedAddressId === address.id
+                            ? 'border-[#b9d1ff] bg-[#1b2129] shadow-[0_0_0_2px_rgba(185,209,255,0.15)]'
+                            : 'border-white/5 bg-[#0b1016]'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-4">
+                          <div>
+                            <div className="text-xl font-bold text-slate-100">{address.label ?? 'Saved Address'}</div>
+                            <div className="mt-2 text-sm text-slate-400">{address.contact_name ?? 'No contact name'}</div>
+                          </div>
+                          {address.is_default ? (
+                            <span className="rounded-full border border-emerald-400/20 bg-emerald-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-200">
+                              Default
+                            </span>
+                          ) : null}
+                        </div>
+                        <div className="mt-4 text-sm leading-relaxed text-slate-300">
+                          {[address.street, address.city, address.state, address.zip_code, address.country].filter(Boolean).join(', ')}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-[24px] border border-white/5 bg-[#0b1016] p-6 text-slate-400">
+                    No saved addresses found. You can still enter shipping details manually or add addresses from My Account.
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <div className="mb-8 flex items-center gap-4">
                   <span className="inline-flex h-8 min-w-8 items-center justify-center rounded-lg bg-[#172131] px-2 text-xs font-black tracking-[0.2em] text-[#aac7ff]">01</span>
                   <h2 className="text-4xl font-bold tracking-tight">Contact Information</h2>
                 </div>
@@ -897,6 +1235,8 @@ function ShippingView({
                     <span className="mb-4 block text-sm font-bold uppercase tracking-[0.24em] text-slate-300">Email Address</span>
                     <input
                       type="email"
+                      value={shippingForm.email}
+                      onChange={(event) => setShippingForm((prev) => ({ ...prev, email: event.target.value }))}
                       placeholder="name@domain.tech"
                       className="w-full rounded-2xl border border-white/5 bg-[#0b1016] px-6 py-5 text-xl text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-[#aac7ff]/40"
                     />
@@ -905,6 +1245,8 @@ function ShippingView({
                     <span className="mb-4 block text-sm font-bold uppercase tracking-[0.24em] text-slate-300">Phone Number</span>
                     <input
                       type="tel"
+                      value={shippingForm.phone}
+                      onChange={(event) => setShippingForm((prev) => ({ ...prev, phone: event.target.value }))}
                       placeholder="+1 (555) 000-0000"
                       className="w-full rounded-2xl border border-white/5 bg-[#0b1016] px-6 py-5 text-xl text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-[#aac7ff]/40"
                     />
@@ -920,30 +1262,52 @@ function ShippingView({
                 <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                   <label className="block">
                     <span className="mb-4 block text-sm font-bold uppercase tracking-[0.24em] text-slate-300">First Name</span>
-                    <input className="w-full rounded-2xl border border-white/5 bg-[#0b1016] px-6 py-5 text-xl text-slate-200 focus:outline-none focus:border-[#aac7ff]/40" />
+                    <input
+                      value={shippingForm.firstName}
+                      onChange={(event) => setShippingForm((prev) => ({ ...prev, firstName: event.target.value }))}
+                      className="w-full rounded-2xl border border-white/5 bg-[#0b1016] px-6 py-5 text-xl text-slate-200 focus:outline-none focus:border-[#aac7ff]/40"
+                    />
                   </label>
                   <label className="block">
                     <span className="mb-4 block text-sm font-bold uppercase tracking-[0.24em] text-slate-300">Last Name</span>
-                    <input className="w-full rounded-2xl border border-white/5 bg-[#0b1016] px-6 py-5 text-xl text-slate-200 focus:outline-none focus:border-[#aac7ff]/40" />
+                    <input
+                      value={shippingForm.lastName}
+                      onChange={(event) => setShippingForm((prev) => ({ ...prev, lastName: event.target.value }))}
+                      className="w-full rounded-2xl border border-white/5 bg-[#0b1016] px-6 py-5 text-xl text-slate-200 focus:outline-none focus:border-[#aac7ff]/40"
+                    />
                   </label>
                   <label className="block md:col-span-2">
                     <span className="mb-4 block text-sm font-bold uppercase tracking-[0.24em] text-slate-300">Street Address</span>
                     <input
+                      value={shippingForm.street}
+                      onChange={(event) => setShippingForm((prev) => ({ ...prev, street: event.target.value }))}
                       placeholder="123 Tech Boulevard"
                       className="w-full rounded-2xl border border-white/5 bg-[#0b1016] px-6 py-5 text-xl text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-[#aac7ff]/40"
                     />
                   </label>
                   <label className="block">
                     <span className="mb-4 block text-sm font-bold uppercase tracking-[0.24em] text-slate-300">City</span>
-                    <input className="w-full rounded-2xl border border-white/5 bg-[#0b1016] px-6 py-5 text-xl text-slate-200 focus:outline-none focus:border-[#aac7ff]/40" />
+                    <input
+                      value={shippingForm.city}
+                      onChange={(event) => setShippingForm((prev) => ({ ...prev, city: event.target.value }))}
+                      className="w-full rounded-2xl border border-white/5 bg-[#0b1016] px-6 py-5 text-xl text-slate-200 focus:outline-none focus:border-[#aac7ff]/40"
+                    />
                   </label>
                   <label className="block">
                     <span className="mb-4 block text-sm font-bold uppercase tracking-[0.24em] text-slate-300">State / Province</span>
-                    <input className="w-full rounded-2xl border border-white/5 bg-[#0b1016] px-6 py-5 text-xl text-slate-200 focus:outline-none focus:border-[#aac7ff]/40" />
+                    <input
+                      value={shippingForm.state}
+                      onChange={(event) => setShippingForm((prev) => ({ ...prev, state: event.target.value }))}
+                      className="w-full rounded-2xl border border-white/5 bg-[#0b1016] px-6 py-5 text-xl text-slate-200 focus:outline-none focus:border-[#aac7ff]/40"
+                    />
                   </label>
                   <label className="block">
                     <span className="mb-4 block text-sm font-bold uppercase tracking-[0.24em] text-slate-300">Postal Code</span>
-                    <input className="w-full rounded-2xl border border-white/5 bg-[#0b1016] px-6 py-5 text-xl text-slate-200 focus:outline-none focus:border-[#aac7ff]/40" />
+                    <input
+                      value={shippingForm.postalCode}
+                      onChange={(event) => setShippingForm((prev) => ({ ...prev, postalCode: event.target.value }))}
+                      className="w-full rounded-2xl border border-white/5 bg-[#0b1016] px-6 py-5 text-xl text-slate-200 focus:outline-none focus:border-[#aac7ff]/40"
+                    />
                   </label>
                 </div>
               </div>
@@ -1001,7 +1365,10 @@ function ShippingView({
                 </button>
                 <button
                   type="button"
-                  onClick={onProceedToPayment}
+                  onClick={() => {
+                    onShippingAddressChange(shippingForm);
+                    onProceedToPayment();
+                  }}
                   className="rounded-[22px] bg-gradient-to-r from-[#a9c7ff] to-[#4d93f7] px-10 py-6 text-2xl font-bold text-[#02182d] shadow-[0_24px_60px_rgba(77,147,247,0.35)] transition-transform hover:scale-[1.01]"
                 >
                   Proceed to Payment
@@ -1361,6 +1728,7 @@ function PaymentView({
 
 function ReviewView({
   cartItems,
+  checkoutShippingAddress,
   shippingMethod,
   onClose,
   onGoHome,
@@ -1370,6 +1738,7 @@ function ReviewView({
   onPlaceOrder,
 }: {
   cartItems: CartItem[];
+  checkoutShippingAddress: CheckoutShippingAddress | null;
   shippingMethod: 'priority' | 'express';
   onClose: () => void;
   onGoHome: () => void;
@@ -1387,6 +1756,7 @@ function ReviewView({
   }, 0);
   const tax = subtotal * 0.0825;
   const total = subtotal + shippingCost + tax;
+  const shippingName = [checkoutShippingAddress?.firstName, checkoutShippingAddress?.lastName].filter(Boolean).join(' ').trim();
 
   return (
     <motion.div
@@ -1481,10 +1851,13 @@ function ReviewView({
                   <button type="button" onClick={onBackToShipping} className="text-lg font-bold text-[#b9d1ff]">Edit</button>
                 </div>
                 <div className="space-y-2 text-2xl text-slate-100">
-                  <p>Alex Thompson</p>
-                  <p className="text-slate-400">1284 Tech Plaza, Suite 402</p>
-                  <p className="text-slate-400">San Francisco, CA 94103</p>
-                  <p className="text-slate-400">United States</p>
+                  <p>{shippingName || 'Shipping contact not set'}</p>
+                  <p className="text-slate-400">{checkoutShippingAddress?.street || 'Street address not set'}</p>
+                  <p className="text-slate-400">
+                    {[checkoutShippingAddress?.city, checkoutShippingAddress?.state, checkoutShippingAddress?.postalCode].filter(Boolean).join(', ') || 'City / region not set'}
+                  </p>
+                  <p className="text-slate-400">{checkoutShippingAddress?.country || 'Country not set'}</p>
+                  <p className="text-slate-400">{checkoutShippingAddress?.email || 'Email not set'}</p>
                 </div>
                 <div className="mt-10 border-t border-white/5 pt-8">
                   <div className="inline-flex items-center gap-3 text-lg uppercase tracking-[0.18em] text-slate-300">
@@ -1568,6 +1941,8 @@ function ReviewView({
 
 function OrderConfirmedView({
   cartItems,
+  order,
+  checkoutShippingAddress,
   shippingMethod,
   onClose,
   onGoHome,
@@ -1575,6 +1950,8 @@ function OrderConfirmedView({
   onContinueShopping,
 }: {
   cartItems: CartItem[];
+  order: Order | null;
+  checkoutShippingAddress: CheckoutShippingAddress | null;
   shippingMethod: 'priority' | 'express';
   onClose: () => void;
   onGoHome: () => void;
@@ -1582,13 +1959,17 @@ function OrderConfirmedView({
   onContinueShopping: () => void;
   key?: string;
 }) {
-  const shippingCost = shippingMethod === 'priority' ? 12 : 35;
-  const subtotal = cartItems.reduce((sum, item) => {
+  const shippingCost = Number(order?.shipping_amount ?? (shippingMethod === 'priority' ? 12 : 35));
+  const subtotal = Number(order?.subtotal_amount ?? cartItems.reduce((sum, item) => {
     const product = PRODUCTS.find((entry) => entry.id === item.productId);
     return sum + (product?.price ?? 0) * item.quantity;
-  }, 0);
-  const tax = subtotal * 0.08;
-  const total = subtotal + shippingCost + tax;
+  }, 0));
+  const tax = Number(order?.tax_amount ?? subtotal * 0.08);
+  const total = Number(order?.total_amount ?? subtotal + shippingCost + tax);
+  const shippingName = order?.shipping_address.contact_name
+    ?? [checkoutShippingAddress?.firstName, checkoutShippingAddress?.lastName].filter(Boolean).join(' ').trim();
+  const orderItems = order?.items ?? [];
+  const orderShippingMethod = order?.shipping_method ?? shippingMethod;
 
   return (
     <motion.div
@@ -1650,11 +2031,13 @@ function OrderConfirmedView({
                   <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-[#303946] text-[#b9d1ff]">
                     <Truck size={34} />
                   </div>
-                  <div>
-                    <div className="text-3xl font-bold text-slate-100">Thursday, Oct 24 - Saturday, Oct 26</div>
-                    <div className="mt-3 text-2xl text-slate-400">
-                      {shippingMethod === 'priority' ? 'Standard High-Priority Logistics' : 'Quantum Express Priority Lane'}
-                    </div>
+                    <div>
+                      <div className="text-3xl font-bold text-slate-100">
+                        {orderShippingMethod === 'priority' ? 'Priority delivery window confirmed' : 'Express delivery window confirmed'}
+                      </div>
+                      <div className="mt-3 text-2xl text-slate-400">
+                        {orderShippingMethod === 'priority' ? 'Standard High-Priority Logistics' : 'Quantum Express Priority Lane'}
+                      </div>
                   </div>
                 </div>
               </div>
@@ -1664,25 +2047,25 @@ function OrderConfirmedView({
           <aside className="rounded-[32px] border border-white/5 bg-[#232831] p-8 shadow-[0_30px_80px_rgba(0,0,0,0.3)] h-fit">
             <div className="mb-8 flex items-center justify-between gap-4">
               <h2 className="text-4xl font-black tracking-tight">Order Summary</h2>
-              <span className="rounded-full bg-white/6 px-4 py-2 text-lg text-slate-300">#HAV-99281-X</span>
+              <span className="rounded-full bg-white/6 px-4 py-2 text-lg text-slate-300">{order?.order_number ?? 'Pending Order Number'}</span>
             </div>
 
             <div className="space-y-8">
-              {cartItems.map((item) => {
-                const product = PRODUCTS.find((entry) => entry.id === item.productId);
-                if (!product) return null;
+              {orderItems.map((item) => {
                 return (
-                  <div key={item.productId} className="flex gap-5">
+                  <div key={item.id} className="flex gap-5">
                     <div className="h-24 w-24 overflow-hidden rounded-2xl bg-[#0b1016]">
-                      <img src={product.img} alt={product.name} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                      {item.product_image_url ? (
+                        <img src={item.product_image_url} alt={item.product_name} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                      ) : null}
                     </div>
                     <div className="flex-1">
                       <div className="flex items-start justify-between gap-4">
                         <div>
-                          <h3 className="text-2xl font-bold text-slate-100">{product.name}</h3>
-                          <p className="mt-2 text-xl text-slate-400">{item.variant}</p>
+                          <h3 className="text-2xl font-bold text-slate-100">{item.product_name}</h3>
+                          <p className="mt-2 text-xl text-slate-400">{item.variant_name}</p>
                         </div>
-                        <span className="text-2xl text-slate-100">{formatCurrency(product.price * item.quantity)}</span>
+                        <span className="text-2xl text-slate-100">{formatCurrency(Number(item.unit_price) * item.quantity)}</span>
                       </div>
                     </div>
                   </div>
@@ -1693,7 +2076,7 @@ function OrderConfirmedView({
             <div className="my-8 border-t border-white/5"></div>
             <div className="space-y-4 text-xl">
               <div className="flex items-center justify-between"><span className="text-slate-300">Subtotal</span><span>{formatCurrency(subtotal)}</span></div>
-              <div className="flex items-center justify-between"><span className="text-slate-300">Shipping</span><span className="text-[#75d3ff]">{shippingMethod === 'express' ? 'Express Complimentary' : formatCurrency(shippingCost)}</span></div>
+              <div className="flex items-center justify-between"><span className="text-slate-300">Shipping</span><span className="text-[#75d3ff]">{formatCurrency(shippingCost)}</span></div>
               <div className="flex items-center justify-between"><span className="text-slate-300">Tax (EST)</span><span>{formatCurrency(tax)}</span></div>
             </div>
             <div className="my-8 border-t border-white/5"></div>
@@ -1707,9 +2090,14 @@ function OrderConfirmedView({
                 <MapPin size={24} className="mt-1 text-slate-400" />
                 <div className="text-xl leading-relaxed text-slate-300">
                   <div className="font-bold text-slate-100">Shipping To</div>
-                  <div className="mt-3">Alex Thompson</div>
-                  <div>742 Digital Horizon Parkway, Ste 402</div>
-                  <div>Neo-City, CA 94103</div>
+                  <div className="mt-3">{shippingName || 'Shipping contact not set'}</div>
+                  <div>{order?.shipping_address.street ?? checkoutShippingAddress?.street ?? 'Street address not set'}</div>
+                  <div>{[
+                    order?.shipping_address.city ?? checkoutShippingAddress?.city,
+                    order?.shipping_address.state ?? checkoutShippingAddress?.state,
+                    order?.shipping_address.postal_code ?? checkoutShippingAddress?.postalCode,
+                  ].filter(Boolean).join(', ') || 'City / region not set'}</div>
+                  <div>{order?.shipping_address.country ?? checkoutShippingAddress?.country ?? 'Country not set'}</div>
                 </div>
               </div>
             </div>
@@ -1732,14 +2120,18 @@ function OrderConfirmedView({
 }
 
 function TrackOrderView({
+  authSession,
   cartItems,
+  trackedOrderId,
   shippingMethod,
   onClose,
   onGoHome,
   onBackToOrders,
   onContinueShopping,
 }: {
+  authSession: AuthSession;
   cartItems: CartItem[];
+  trackedOrderId: string | null;
   shippingMethod: 'priority' | 'express';
   onClose: () => void;
   onGoHome: () => void;
@@ -1747,6 +2139,9 @@ function TrackOrderView({
   onContinueShopping: () => void;
   key?: string;
 }) {
+  const [order, setOrder] = useState<Order | null>(null);
+  const [isLoadingOrder, setIsLoadingOrder] = useState(false);
+  const [orderError, setOrderError] = useState<string | null>(null);
   const subtotal = cartItems.reduce((sum, item) => {
     const product = PRODUCTS.find((entry) => entry.id === item.productId);
     return sum + (product?.price ?? 0) * item.quantity;
@@ -1755,11 +2150,46 @@ function TrackOrderView({
   const tax = subtotal * 0.08;
   const total = subtotal + shippingCost + tax;
   const trackingSteps = [
-    { title: 'Order Confirmed', detail: 'Payment verified and order created in the Havtel system.', done: true },
-    { title: 'Hardware Assembly', detail: 'Components are being prepared and packaged for dispatch.', done: true },
-    { title: 'In Transit', detail: 'Carrier manifest created. Pickup window scheduled for tonight.', done: false, current: true },
-    { title: 'Delivered', detail: 'Final delivery to your registered destination.', done: false },
+    { key: 'confirmed', title: 'Order Confirmed', detail: 'Payment verified and order created in the Havtel system.' },
+    { key: 'processing', title: 'Hardware Assembly', detail: 'Components are being prepared and packaged for dispatch.' },
+    { key: 'in_transit', title: 'In Transit', detail: 'Carrier manifest created and shipment is on the move.' },
+    { key: 'delivered', title: 'Delivered', detail: 'Final delivery to your registered destination.' },
   ];
+
+  useEffect(() => {
+    if (!authSession?.access_token || !trackedOrderId) {
+      setOrder(null);
+      setOrderError(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadOrder = async () => {
+      setIsLoadingOrder(true);
+      setOrderError(null);
+      try {
+        const nextOrder = await getOrderRequest(authSession.access_token, trackedOrderId);
+        if (!cancelled) {
+          setOrder(nextOrder);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setOrderError(error instanceof ApiError ? error.message : 'Unable to load this order right now.');
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoadingOrder(false);
+        }
+      }
+    };
+
+    void loadOrder();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authSession?.access_token, trackedOrderId]);
 
   return (
     <motion.div
@@ -1787,32 +2217,44 @@ function TrackOrderView({
               <span className="mb-4 block text-sm font-bold uppercase tracking-[0.34em] text-[#b5cbff]">Shipment Tracking</span>
               <h1 className="text-6xl font-black tracking-tighter md:text-7xl">Track Your Order</h1>
               <p className="mt-6 max-w-3xl text-2xl leading-relaxed text-slate-400">
-                Follow your hardware package in real time and review the latest fulfillment milestones for order `#HAV-99281-X`.
+                Follow your hardware package in real time and review the latest fulfillment milestones for order `{order?.order_number ?? '...'}`.
               </p>
             </div>
 
             <div className="rounded-[30px] border border-white/5 bg-[#171d26] p-8 md:p-10">
+              {isLoadingOrder ? (
+                <p className="mb-8 rounded-2xl border border-[#75d3ff]/20 bg-[#75d3ff]/10 px-4 py-3 text-sm text-[#d6f2ff]">
+                  Loading your latest tracking details...
+                </p>
+              ) : null}
+              {orderError ? (
+                <p className="mb-8 rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">{orderError}</p>
+              ) : null}
               <div className="mb-10 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
                 <div>
                   <div className="text-sm font-bold uppercase tracking-[0.3em] text-slate-400">Current Status</div>
-                  <div className="mt-3 text-4xl font-black text-[#9dd6ff]">In Transit</div>
+                  <div className="mt-3 text-4xl font-black capitalize text-[#9dd6ff]">{order?.status?.replaceAll('_', ' ') ?? 'Loading'}</div>
                 </div>
-                <div className="text-xl text-slate-400">Estimated arrival: Thursday, Oct 24 - Saturday, Oct 26</div>
+                <div className="text-xl text-slate-400">{order?.tracking_code ? `Tracking code: ${order.tracking_code}` : 'Tracking code pending'}</div>
               </div>
 
               <div className="space-y-8">
-                {trackingSteps.map((step, index) => (
+                {trackingSteps.map((step, index) => {
+                  const currentIndex = Math.max(0, trackingSteps.findIndex((entry) => entry.key === (order?.status ?? 'confirmed')));
+                  const done = index < currentIndex || (index === currentIndex && step.key !== order?.status);
+                  const current = step.key === order?.status;
+                  return (
                   <div key={step.title} className="flex gap-5">
                     <div className="flex flex-col items-center">
                       <div
                         className={`flex h-12 w-12 items-center justify-center rounded-full ${
-                          step.done ? 'bg-[#9ee3ff] text-[#041521]' : step.current ? 'bg-[#223b53] text-[#b9d1ff] ring-4 ring-[#223b53]/40' : 'bg-[#252d39] text-slate-500'
+                          done ? 'bg-[#9ee3ff] text-[#041521]' : current ? 'bg-[#223b53] text-[#b9d1ff] ring-4 ring-[#223b53]/40' : 'bg-[#252d39] text-slate-500'
                         }`}
                       >
-                        {step.done ? <Check size={22} /> : <div className="h-3 w-3 rounded-full bg-current"></div>}
+                        {done ? <Check size={22} /> : <div className="h-3 w-3 rounded-full bg-current"></div>}
                       </div>
                       {index < trackingSteps.length - 1 && (
-                        <div className={`mt-3 h-20 w-1 rounded-full ${step.done ? 'bg-[#5abaf0]' : 'bg-white/8'}`}></div>
+                        <div className={`mt-3 h-20 w-1 rounded-full ${done ? 'bg-[#5abaf0]' : 'bg-white/8'}`}></div>
                       )}
                     </div>
                     <div className="pt-1">
@@ -1820,7 +2262,7 @@ function TrackOrderView({
                       <p className="mt-2 max-w-2xl text-xl leading-relaxed text-slate-400">{step.detail}</p>
                     </div>
                   </div>
-                ))}
+                )})}
               </div>
             </div>
 
@@ -1846,48 +2288,54 @@ function TrackOrderView({
             <div className="rounded-[32px] border border-white/5 bg-[#232831] p-8 shadow-[0_30px_80px_rgba(0,0,0,0.3)]">
               <div className="mb-8 flex items-center justify-between gap-4">
                 <h2 className="text-4xl font-black tracking-tight">Tracking Summary</h2>
-                <span className="rounded-full bg-white/6 px-4 py-2 text-lg text-slate-300">ZX-44-NEO-81</span>
+                <span className="rounded-full bg-white/6 px-4 py-2 text-lg text-slate-300">{order?.tracking_code ?? 'Pending'}</span>
               </div>
               <div className="space-y-6">
-                {cartItems.map((item) => {
-                  const product = PRODUCTS.find((entry) => entry.id === item.productId);
-                  if (!product) return null;
-                  return (
-                    <div key={item.productId} className="flex items-center justify-between gap-4">
-                      <div className="flex items-center gap-4">
-                        <div className="h-16 w-16 overflow-hidden rounded-xl bg-[#0b1016]">
-                          <img src={product.img} alt={product.name} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                {(order?.items ?? []).length > 0 ? (
+                  (order?.items ?? []).map((item) => {
+                    return (
+                      <div key={item.id} className="flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-4">
+                          <div className="h-16 w-16 overflow-hidden rounded-xl bg-[#0b1016]">
+                            {item.product_image_url ? (
+                              <img src={item.product_image_url} alt={item.product_name} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                            ) : null}
+                          </div>
+                          <div>
+                            <div className="text-xl font-bold text-slate-100">{item.product_name}</div>
+                            <div className="text-base text-slate-400">Qty: {item.quantity}</div>
+                          </div>
                         </div>
-                        <div>
-                          <div className="text-xl font-bold text-slate-100">{product.name}</div>
-                          <div className="text-base text-slate-400">Qty: {item.quantity}</div>
-                        </div>
+                        <span className="text-lg text-slate-300">{formatCurrency(Number(item.unit_price) * item.quantity)}</span>
                       </div>
-                      <span className="text-lg text-slate-300">{formatCurrency(product.price * item.quantity)}</span>
-                    </div>
-                  );
-                })}
+                    );
+                  })
+                ) : (
+                  <div className="rounded-2xl border border-white/5 bg-white/[0.03] px-4 py-5 text-base text-slate-400">
+                    Your order items will appear here once the order details finish loading.
+                  </div>
+                )}
               </div>
               <div className="my-8 border-t border-white/5"></div>
               <div className="space-y-4 text-lg">
-                <div className="flex items-center justify-between"><span className="text-slate-300">Subtotal</span><span>{formatCurrency(subtotal)}</span></div>
-                <div className="flex items-center justify-between"><span className="text-slate-300">Shipping</span><span>{formatCurrency(shippingCost)}</span></div>
-                <div className="flex items-center justify-between"><span className="text-slate-300">Tax</span><span>{formatCurrency(tax)}</span></div>
+                <div className="flex items-center justify-between"><span className="text-slate-300">Subtotal</span><span>{formatCurrency(Number(order?.subtotal_amount ?? subtotal))}</span></div>
+                <div className="flex items-center justify-between"><span className="text-slate-300">Shipping</span><span>{formatCurrency(Number(order?.shipping_amount ?? shippingCost))}</span></div>
+                <div className="flex items-center justify-between"><span className="text-slate-300">Tax</span><span>{formatCurrency(Number(order?.tax_amount ?? tax))}</span></div>
               </div>
               <div className="my-8 border-t border-white/5"></div>
               <div className="flex items-end justify-between gap-4">
                 <span className="text-2xl font-bold text-slate-100">Total</span>
-                <span className="text-5xl font-black tracking-tight text-[#a9c7ff]">{formatCurrency(total)}</span>
+                <span className="text-5xl font-black tracking-tight text-[#a9c7ff]">{formatCurrency(Number(order?.total_amount ?? total))}</span>
               </div>
             </div>
 
             <div className="rounded-[28px] border border-white/5 bg-[#161c24] p-8">
               <div className="text-sm font-bold uppercase tracking-[0.32em] text-[#b5cbff] mb-6">Destination</div>
               <div className="space-y-2 text-xl text-slate-300">
-                <div>Alex Thompson</div>
-                <div>742 Digital Horizon Parkway, Ste 402</div>
-                <div>Neo-City, CA 94103</div>
-                <div>United States</div>
+                <div>{order?.shipping_address.contact_name ?? 'Shipping contact pending'}</div>
+                <div>{order?.shipping_address.street ?? 'Street pending'}</div>
+                <div>{[order?.shipping_address.city, order?.shipping_address.state, order?.shipping_address.postal_code].filter(Boolean).join(', ') || 'Location pending'}</div>
+                <div>{order?.shipping_address.country ?? 'Country pending'}</div>
               </div>
             </div>
           </aside>
@@ -2336,15 +2784,24 @@ function AuthSignupView({
   errorMessage,
   isSubmitting,
 }: {
-  onSignup: (payload: { firstName: string; lastName: string; email: string; password: string }) => Promise<void>;
+  onSignup: (payload: {
+    accountType: 'b2c' | 'b2b';
+    firstName: string;
+    lastName: string;
+    companyName: string;
+    email: string;
+    password: string;
+  }) => Promise<void>;
   onGoHome: () => void;
   onGoToLogin: () => void;
   errorMessage: string | null;
   isSubmitting: boolean;
   key?: string;
 }) {
+  const [accountType, setAccountType] = useState<'b2c' | 'b2b'>('b2c');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
+  const [companyName, setCompanyName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
@@ -2371,12 +2828,61 @@ function AuthSignupView({
             <form
               onSubmit={async (event) => {
                 event.preventDefault();
-                await onSignup({ firstName, lastName, email, password });
+                await onSignup({ accountType, firstName, lastName, companyName, email, password });
               }}
               className="mt-8 grid grid-cols-1 gap-6"
             >
-              <input required value={firstName} onChange={(event) => setFirstName(event.target.value)} placeholder="First name" className="w-full rounded-2xl border border-white/5 bg-[#0b1016] px-6 py-5 text-xl text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-[#aac7ff]/40" />
-              <input required value={lastName} onChange={(event) => setLastName(event.target.value)} placeholder="Last name" className="w-full rounded-2xl border border-white/5 bg-[#0b1016] px-6 py-5 text-xl text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-[#aac7ff]/40" />
+              <div className="grid grid-cols-1 gap-3 rounded-[24px] border border-white/5 bg-[#141a22] p-3 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => setAccountType('b2c')}
+                  className={`rounded-2xl px-5 py-4 text-left transition-all ${
+                    accountType === 'b2c'
+                      ? 'bg-gradient-to-r from-[#a9c7ff] to-[#4d93f7] text-[#03192f]'
+                      : 'bg-[#0b1016] text-slate-300 hover:bg-[#111823]'
+                  }`}
+                >
+                  <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10">
+                    <CircleUserRound size={22} />
+                  </div>
+                  <div className="text-sm font-black uppercase tracking-[0.24em]">Personal</div>
+                  <div className={`mt-2 text-sm ${accountType === 'b2c' ? 'text-[#0a2745]' : 'text-slate-400'}`}>
+                    Create an individual account for personal purchases and saved preferences.
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAccountType('b2b')}
+                  className={`rounded-2xl px-5 py-4 text-left transition-all ${
+                    accountType === 'b2b'
+                      ? 'bg-gradient-to-r from-[#a9c7ff] to-[#4d93f7] text-[#03192f]'
+                      : 'bg-[#0b1016] text-slate-300 hover:bg-[#111823]'
+                  }`}
+                >
+                  <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10">
+                    <Building2 size={22} />
+                  </div>
+                  <div className="text-sm font-black uppercase tracking-[0.24em]">Company</div>
+                  <div className={`mt-2 text-sm ${accountType === 'b2b' ? 'text-[#0a2745]' : 'text-slate-400'}`}>
+                    Create a business account for B2B orders, procurement teams, and corporate checkout flows.
+                  </div>
+                </button>
+              </div>
+
+              {accountType === 'b2b' ? (
+                <input
+                  required
+                  value={companyName}
+                  onChange={(event) => setCompanyName(event.target.value)}
+                  placeholder="Company name"
+                  className="w-full rounded-2xl border border-white/5 bg-[#0b1016] px-6 py-5 text-xl text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-[#aac7ff]/40"
+                />
+              ) : (
+                <>
+                  <input required value={firstName} onChange={(event) => setFirstName(event.target.value)} placeholder="First name" className="w-full rounded-2xl border border-white/5 bg-[#0b1016] px-6 py-5 text-xl text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-[#aac7ff]/40" />
+                  <input required value={lastName} onChange={(event) => setLastName(event.target.value)} placeholder="Last name" className="w-full rounded-2xl border border-white/5 bg-[#0b1016] px-6 py-5 text-xl text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-[#aac7ff]/40" />
+                </>
+              )}
               <input required type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="Email address" className="w-full rounded-2xl border border-white/5 bg-[#0b1016] px-6 py-5 text-xl text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-[#aac7ff]/40" />
               <input required type="password" minLength={8} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Create password" className="w-full rounded-2xl border border-white/5 bg-[#0b1016] px-6 py-5 text-xl text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-[#aac7ff]/40" />
               {errorMessage ? (
@@ -2844,7 +3350,18 @@ function Shop({ onAddToCart, onProductSelect }: { onAddToCart: (name: string) =>
 }
 
 
-function Account({ onExit, onOpenOrders }: { onExit: () => void; onOpenOrders: () => void; key?: string }) {
+function Account({
+  authSession,
+  onExit,
+  onOpenOrders,
+  onSessionUpdate,
+}: {
+  authSession: AuthSession;
+  onExit: () => void;
+  onOpenOrders: () => void;
+  onSessionUpdate: (session: AuthResponse | null) => void;
+  key?: string;
+}) {
   const [selectedSection, setSelectedSection] = useState<string | null>(null);
   const [personalForm, setPersonalForm] = useState({
     firstName: '',
@@ -2852,23 +3369,83 @@ function Account({ onExit, onOpenOrders }: { onExit: () => void; onOpenOrders: (
     phone: '',
     email: '',
   });
+  const [isSavingPersonal, setIsSavingPersonal] = useState(false);
+  const [personalError, setPersonalError] = useState<string | null>(null);
+  const [isLoadingAddresses, setIsLoadingAddresses] = useState(false);
+  const [isSavingAddress, setIsSavingAddress] = useState(false);
+  const [deliveryError, setDeliveryError] = useState<string | null>(null);
   const [showDeliveryForm, setShowDeliveryForm] = useState(false);
-  const [editingContactId, setEditingContactId] = useState<number | null>(null);
+  const [editingContactId, setEditingContactId] = useState<string | null>(null);
   const [deliveryForm, setDeliveryForm] = useState({
+    label: '',
+    contactName: '',
     email: '',
     phone: '',
-    address: '',
-    ci: '',
+    street: '',
+    city: '',
+    state: '',
+    zipCode: '',
+    country: 'US',
+    taxId: '',
   });
-  const [deliveryContacts, setDeliveryContacts] = useState([
-    {
-      id: 1,
-      email: 'procurement@northstar.io',
-      phone: '+1 (786) 332-4868',
-      address: '2531 NW 72nd Ave Unit A, Miami, FL 33122',
-      ci: 'A1429087',
-    },
-  ]);
+  const [deliveryContacts, setDeliveryContacts] = useState<UserAddress[]>([]);
+  const isCompanyAccount = authSession?.user.customer_type === 'b2b';
+
+  useEffect(() => {
+    const user = authSession?.user;
+    if (!user) {
+      setPersonalForm({
+        firstName: '',
+        lastName: '',
+        phone: '',
+        email: '',
+      });
+      return;
+    }
+
+    const { firstName, lastName } = splitFullName(user.full_name);
+    setPersonalForm({
+      firstName,
+      lastName,
+      phone: user.phone ?? '',
+      email: user.email,
+    });
+  }, [authSession?.user]);
+
+  useEffect(() => {
+    if (!authSession?.access_token) {
+      setDeliveryContacts([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadAddresses = async () => {
+      setIsLoadingAddresses(true);
+      setDeliveryError(null);
+
+      try {
+        const addresses = await listUserAddressesRequest(authSession.access_token);
+        if (!cancelled) {
+          setDeliveryContacts(addresses);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setDeliveryError(error instanceof ApiError ? error.message : 'Unable to load delivery contacts right now.');
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoadingAddresses(false);
+        }
+      }
+    };
+
+    void loadAddresses();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authSession?.access_token]);
 
   const accountSections = [
     {
@@ -2893,13 +3470,20 @@ function Account({ onExit, onOpenOrders }: { onExit: () => void; onOpenOrders: (
 
   const resetDeliveryForm = () => {
     setDeliveryForm({
+      label: '',
+      contactName: '',
       email: '',
       phone: '',
-      address: '',
-      ci: '',
+      street: '',
+      city: '',
+      state: '',
+      zipCode: '',
+      country: 'US',
+      taxId: '',
     });
     setEditingContactId(null);
     setShowDeliveryForm(false);
+    setDeliveryError(null);
   };
 
   return (
@@ -2917,6 +3501,10 @@ function Account({ onExit, onOpenOrders }: { onExit: () => void; onOpenOrders: (
 
         <div className="relative z-10 max-w-4xl mb-16 md:mb-20">
           <span className="text-xs uppercase tracking-[0.35em] text-[#aac7ff] font-bold mb-6 block">Account Center</span>
+          <div className="mb-6 inline-flex items-center gap-3 rounded-full border border-[#aac7ff]/20 bg-[#aac7ff]/10 px-5 py-3 text-sm font-bold text-[#d6e5ff]">
+            {isCompanyAccount ? <Building2 size={18} /> : <CircleUserRound size={18} />}
+            <span>{isCompanyAccount ? 'Logged in with a Company account' : 'Logged in with a Personal account'}</span>
+          </div>
           <h1 className="text-5xl md:text-7xl lg:text-8xl font-black tracking-tighter mb-8 text-slate-100 leading-[0.95] drop-shadow-[0_0_20px_rgba(170,199,255,0.15)]">
             My Account
           </h1>
@@ -2959,45 +3547,92 @@ function Account({ onExit, onOpenOrders }: { onExit: () => void; onOpenOrders: (
               <div className="rounded-[32px] border border-[#aac7ff]/15 bg-gradient-to-br from-[#20252d] via-[#1c2129] to-[#161b22] p-6 md:p-10 shadow-[0_30px_80px_rgba(0,0,0,0.35)]">
                 <div className="mb-8">
                   <span className="text-[11px] uppercase tracking-[0.28em] text-[#b5cbff] font-bold block mb-3">Profile Details</span>
-                  <h3 className="text-3xl font-bold tracking-tight text-slate-100 mb-3">Personal Information</h3>
-                  <p className="text-slate-400">All fields are required before saving your profile details.</p>
+                  <h3 className="text-3xl font-bold tracking-tight text-slate-100 mb-3">
+                    {isCompanyAccount ? 'Company Information' : 'Personal Information'}
+                  </h3>
+                  <p className="text-slate-400">
+                    {isCompanyAccount
+                      ? 'Your company identity and contact phone are loaded from your business account and saved back to your profile.'
+                      : 'Your name and email are loaded from your account session, and phone updates are saved to your profile.'}
+                  </p>
                 </div>
 
                 <form
-                  onSubmit={(event) => {
+                  onSubmit={async (event) => {
                     event.preventDefault();
-                    setSelectedSection(null);
+                    if (!authSession) {
+                      setPersonalError('Your session expired. Please sign in again.');
+                      return;
+                    }
+
+                    setIsSavingPersonal(true);
+                    setPersonalError(null);
+
+                    try {
+                      const fullName = isCompanyAccount
+                        ? personalForm.firstName.trim()
+                        : `${personalForm.firstName} ${personalForm.lastName}`.trim();
+                      const user = await updateCurrentUserRequest(authSession.access_token, {
+                        full_name: fullName,
+                        phone: personalForm.phone.trim() || null,
+                      });
+
+                      onSessionUpdate({
+                        ...authSession,
+                        user,
+                      });
+                      setSelectedSection(null);
+                    } catch (error) {
+                      setPersonalError(error instanceof ApiError ? error.message : 'Unable to save your profile right now.');
+                    } finally {
+                      setIsSavingPersonal(false);
+                    }
                   }}
                   className="grid grid-cols-1 md:grid-cols-2 gap-6"
                 >
-                  <label className="block">
-                    <span className="text-[11px] uppercase tracking-[0.28em] text-[#b5cbff] font-bold block mb-4">First Name</span>
-                    <input
-                      required
-                      type="text"
-                      value={personalForm.firstName}
-                      onChange={(event) => setPersonalForm((prev) => ({ ...prev, firstName: event.target.value }))}
-                      placeholder="Enter your first name"
-                      className="w-full rounded-2xl bg-[#0b1016] border border-white/5 px-6 py-5 text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-[#aac7ff]/40 focus:shadow-[0_0_0_4px_rgba(170,199,255,0.08)] transition-all"
-                    />
-                  </label>
+                  {isCompanyAccount ? (
+                    <label className="block md:col-span-2">
+                      <span className="text-[11px] uppercase tracking-[0.28em] text-[#b5cbff] font-bold block mb-4">Company Name</span>
+                      <input
+                        required
+                        type="text"
+                        value={personalForm.firstName}
+                        onChange={(event) => setPersonalForm((prev) => ({ ...prev, firstName: event.target.value }))}
+                        placeholder="Enter your company name"
+                        className="w-full rounded-2xl bg-[#0b1016] border border-white/5 px-6 py-5 text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-[#aac7ff]/40 focus:shadow-[0_0_0_4px_rgba(170,199,255,0.08)] transition-all"
+                      />
+                    </label>
+                  ) : (
+                    <>
+                      <label className="block">
+                        <span className="text-[11px] uppercase tracking-[0.28em] text-[#b5cbff] font-bold block mb-4">First Name</span>
+                        <input
+                          required
+                          type="text"
+                          value={personalForm.firstName}
+                          onChange={(event) => setPersonalForm((prev) => ({ ...prev, firstName: event.target.value }))}
+                          placeholder="Enter your first name"
+                          className="w-full rounded-2xl bg-[#0b1016] border border-white/5 px-6 py-5 text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-[#aac7ff]/40 focus:shadow-[0_0_0_4px_rgba(170,199,255,0.08)] transition-all"
+                        />
+                      </label>
 
-                  <label className="block">
-                    <span className="text-[11px] uppercase tracking-[0.28em] text-[#b5cbff] font-bold block mb-4">Last Name</span>
-                    <input
-                      required
-                      type="text"
-                      value={personalForm.lastName}
-                      onChange={(event) => setPersonalForm((prev) => ({ ...prev, lastName: event.target.value }))}
-                      placeholder="Enter your last name"
-                      className="w-full rounded-2xl bg-[#0b1016] border border-white/5 px-6 py-5 text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-[#aac7ff]/40 focus:shadow-[0_0_0_4px_rgba(170,199,255,0.08)] transition-all"
-                    />
-                  </label>
+                      <label className="block">
+                        <span className="text-[11px] uppercase tracking-[0.28em] text-[#b5cbff] font-bold block mb-4">Last Name</span>
+                        <input
+                          required
+                          type="text"
+                          value={personalForm.lastName}
+                          onChange={(event) => setPersonalForm((prev) => ({ ...prev, lastName: event.target.value }))}
+                          placeholder="Enter your last name"
+                          className="w-full rounded-2xl bg-[#0b1016] border border-white/5 px-6 py-5 text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-[#aac7ff]/40 focus:shadow-[0_0_0_4px_rgba(170,199,255,0.08)] transition-all"
+                        />
+                      </label>
+                    </>
+                  )}
 
                   <label className="block">
                     <span className="text-[11px] uppercase tracking-[0.28em] text-[#b5cbff] font-bold block mb-4">Phone</span>
                     <input
-                      required
                       type="tel"
                       value={personalForm.phone}
                       onChange={(event) => setPersonalForm((prev) => ({ ...prev, phone: event.target.value }))}
@@ -3012,18 +3647,25 @@ function Account({ onExit, onOpenOrders }: { onExit: () => void; onOpenOrders: (
                       required
                       type="email"
                       value={personalForm.email}
-                      onChange={(event) => setPersonalForm((prev) => ({ ...prev, email: event.target.value }))}
-                      placeholder="Enter your email address"
-                      className="w-full rounded-2xl bg-[#0b1016] border border-white/5 px-6 py-5 text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-[#aac7ff]/40 focus:shadow-[0_0_0_4px_rgba(170,199,255,0.08)] transition-all"
+                      readOnly
+                      placeholder="Your account email"
+                      className="w-full rounded-2xl bg-[#0b1016] border border-white/5 px-6 py-5 text-slate-300 placeholder:text-slate-500 focus:outline-none"
                     />
                   </label>
+
+                  {personalError ? (
+                    <p className="md:col-span-2 rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+                      {personalError}
+                    </p>
+                  ) : null}
 
                   <div className="md:col-span-2 flex flex-col sm:flex-row gap-4 pt-2">
                     <button
                       type="submit"
+                      disabled={isSavingPersonal}
                       className="inline-flex items-center justify-center gap-3 rounded-2xl bg-gradient-to-br from-[#aac7ff] to-[#3e90ff] px-8 py-5 text-lg font-bold text-[#003064] shadow-[0_12px_35px_rgba(62,144,255,0.25)] transition-all hover:scale-[1.02] hover:shadow-[0_20px_45px_rgba(62,144,255,0.35)] active:scale-[0.99]"
                     >
-                      Save
+                      {isSavingPersonal ? 'Saving...' : 'Save'}
                     </button>
                     <button
                       type="button"
@@ -3043,17 +3685,27 @@ function Account({ onExit, onOpenOrders }: { onExit: () => void; onOpenOrders: (
                   <div>
                     <span className="text-[11px] uppercase tracking-[0.28em] text-[#b5cbff] font-bold block mb-3">Shipping Directory</span>
                     <h3 className="text-3xl font-bold tracking-tight text-slate-100 mb-3">Delivery Contacts</h3>
-                    <p className="text-slate-400">Add and manage your saved delivery contacts from this section.</p>
+                    <p className="text-slate-400">
+                      {isCompanyAccount
+                        ? 'Manage business recipients, procurement contacts, tax identifiers, and delivery destinations.'
+                        : 'Add and manage your saved delivery contacts from this section.'}
+                    </p>
                   </div>
                   <button
                     type="button"
                     onClick={() => {
                       setEditingContactId(null);
                       setDeliveryForm({
+                        label: '',
+                        contactName: '',
                         email: '',
                         phone: '',
-                        address: '',
-                        ci: '',
+                        street: '',
+                        city: '',
+                        state: '',
+                        zipCode: '',
+                        country: 'US',
+                        taxId: '',
                       });
                       setShowDeliveryForm(true);
                     }}
@@ -3065,29 +3717,77 @@ function Account({ onExit, onOpenOrders }: { onExit: () => void; onOpenOrders: (
 
                 {showDeliveryForm && (
                   <form
-                    onSubmit={(event) => {
+                    onSubmit={async (event) => {
                       event.preventDefault();
-
-                      if (editingContactId !== null) {
-                        setDeliveryContacts((prev) =>
-                          prev.map((contact) =>
-                            contact.id === editingContactId ? { ...contact, ...deliveryForm } : contact
-                          )
-                        );
-                      } else {
-                        setDeliveryContacts((prev) => [
-                          ...prev,
-                          {
-                            id: Date.now(),
-                            ...deliveryForm,
-                          },
-                        ]);
+                      if (!authSession) {
+                        setDeliveryError('Your session expired. Please sign in again.');
+                        return;
                       }
 
-                      resetDeliveryForm();
+                      setIsSavingAddress(true);
+                      setDeliveryError(null);
+
+                      try {
+                        const payload = {
+                          label: deliveryForm.label.trim() || null,
+                          contact_name: deliveryForm.contactName.trim() || null,
+                          contact_email: deliveryForm.email.trim() || null,
+                          contact_phone: deliveryForm.phone.trim() || null,
+                          street: deliveryForm.street.trim(),
+                          city: deliveryForm.city.trim(),
+                          state: deliveryForm.state.trim() || null,
+                          zip_code: deliveryForm.zipCode.trim() || null,
+                          country: deliveryForm.country.trim(),
+                          tax_id: deliveryForm.taxId.trim() || null,
+                        };
+
+                        if (editingContactId !== null) {
+                          const updated = await updateUserAddressRequest(authSession.access_token, editingContactId, payload);
+                          setDeliveryContacts((prev) =>
+                            prev.map((contact) => (contact.id === updated.id ? updated : contact))
+                          );
+                        } else {
+                          const created = await createUserAddressRequest(authSession.access_token, payload);
+                          setDeliveryContacts((prev) => {
+                            const next = [...prev, created];
+                            return next.sort((a, b) => Number(b.is_default) - Number(a.is_default));
+                          });
+                        }
+
+                        resetDeliveryForm();
+                      } catch (error) {
+                        setDeliveryError(error instanceof ApiError ? error.message : 'Unable to save this delivery contact right now.');
+                      } finally {
+                        setIsSavingAddress(false);
+                      }
                     }}
                     className="grid grid-cols-1 md:grid-cols-2 gap-6 rounded-[28px] border border-white/5 bg-[#0f141b]/80 p-6 md:p-8 mb-8"
                   >
+                    <label className="block">
+                      <span className="text-[11px] uppercase tracking-[0.28em] text-[#b5cbff] font-bold block mb-4">Label</span>
+                      <input
+                        type="text"
+                        value={deliveryForm.label}
+                        onChange={(event) => setDeliveryForm((prev) => ({ ...prev, label: event.target.value }))}
+                        placeholder={isCompanyAccount ? 'Warehouse, HQ, Branch Office...' : 'Home, Office, Family...'}
+                        className="w-full rounded-2xl bg-[#0b1016] border border-white/5 px-6 py-5 text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-[#aac7ff]/40 focus:shadow-[0_0_0_4px_rgba(170,199,255,0.08)] transition-all"
+                      />
+                    </label>
+
+                    <label className={`${isCompanyAccount ? 'block md:col-span-2' : 'block'}`}>
+                      <span className="text-[11px] uppercase tracking-[0.28em] text-[#b5cbff] font-bold block mb-4">
+                        {isCompanyAccount ? 'Contact Person or Team' : 'Recipient Name'}
+                      </span>
+                      <input
+                        required
+                        type="text"
+                        value={deliveryForm.contactName}
+                        onChange={(event) => setDeliveryForm((prev) => ({ ...prev, contactName: event.target.value }))}
+                        placeholder={isCompanyAccount ? 'Procurement team or business contact' : 'Who will receive this order?'}
+                        className="w-full rounded-2xl bg-[#0b1016] border border-white/5 px-6 py-5 text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-[#aac7ff]/40 focus:shadow-[0_0_0_4px_rgba(170,199,255,0.08)] transition-all"
+                      />
+                    </label>
+
                     <label className="block">
                       <span className="text-[11px] uppercase tracking-[0.28em] text-[#b5cbff] font-bold block mb-4">Email</span>
                       <input
@@ -3112,36 +3812,91 @@ function Account({ onExit, onOpenOrders }: { onExit: () => void; onOpenOrders: (
                       />
                     </label>
 
-                    <label className="block md:col-span-2">
-                      <span className="text-[11px] uppercase tracking-[0.28em] text-[#b5cbff] font-bold block mb-4">Address</span>
+                    <label className="block">
+                      <span className="text-[11px] uppercase tracking-[0.28em] text-[#b5cbff] font-bold block mb-4">Street</span>
                       <input
                         required
                         type="text"
-                        value={deliveryForm.address}
-                        onChange={(event) => setDeliveryForm((prev) => ({ ...prev, address: event.target.value }))}
-                        placeholder="Enter delivery address"
+                        value={deliveryForm.street}
+                        onChange={(event) => setDeliveryForm((prev) => ({ ...prev, street: event.target.value }))}
+                        placeholder="Street and number"
                         className="w-full rounded-2xl bg-[#0b1016] border border-white/5 px-6 py-5 text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-[#aac7ff]/40 focus:shadow-[0_0_0_4px_rgba(170,199,255,0.08)] transition-all"
                       />
                     </label>
 
                     <label className="block">
-                      <span className="text-[11px] uppercase tracking-[0.28em] text-[#b5cbff] font-bold block mb-4">CI</span>
+                      <span className="text-[11px] uppercase tracking-[0.28em] text-[#b5cbff] font-bold block mb-4">City</span>
                       <input
                         required
                         type="text"
-                        value={deliveryForm.ci}
-                        onChange={(event) => setDeliveryForm((prev) => ({ ...prev, ci: event.target.value }))}
-                        placeholder="Enter CI"
+                        value={deliveryForm.city}
+                        onChange={(event) => setDeliveryForm((prev) => ({ ...prev, city: event.target.value }))}
+                        placeholder="City"
                         className="w-full rounded-2xl bg-[#0b1016] border border-white/5 px-6 py-5 text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-[#aac7ff]/40 focus:shadow-[0_0_0_4px_rgba(170,199,255,0.08)] transition-all"
                       />
                     </label>
 
+                    <label className="block md:col-span-2">
+                      <span className="text-[11px] uppercase tracking-[0.28em] text-[#b5cbff] font-bold block mb-4">State / Region</span>
+                      <input
+                        type="text"
+                        value={deliveryForm.state}
+                        onChange={(event) => setDeliveryForm((prev) => ({ ...prev, state: event.target.value }))}
+                        placeholder="State or region"
+                        className="w-full rounded-2xl bg-[#0b1016] border border-white/5 px-6 py-5 text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-[#aac7ff]/40 focus:shadow-[0_0_0_4px_rgba(170,199,255,0.08)] transition-all"
+                      />
+                    </label>
+
+                    <label className="block">
+                      <span className="text-[11px] uppercase tracking-[0.28em] text-[#b5cbff] font-bold block mb-4">ZIP / Postal Code</span>
+                      <input
+                        type="text"
+                        value={deliveryForm.zipCode}
+                        onChange={(event) => setDeliveryForm((prev) => ({ ...prev, zipCode: event.target.value }))}
+                        placeholder="ZIP or postal code"
+                        className="w-full rounded-2xl bg-[#0b1016] border border-white/5 px-6 py-5 text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-[#aac7ff]/40 focus:shadow-[0_0_0_4px_rgba(170,199,255,0.08)] transition-all"
+                      />
+                    </label>
+
+                    <label className="block">
+                      <span className="text-[11px] uppercase tracking-[0.28em] text-[#b5cbff] font-bold block mb-4">Country</span>
+                      <input
+                        required
+                        type="text"
+                        value={deliveryForm.country}
+                        onChange={(event) => setDeliveryForm((prev) => ({ ...prev, country: event.target.value }))}
+                        placeholder="Country"
+                        className="w-full rounded-2xl bg-[#0b1016] border border-white/5 px-6 py-5 text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-[#aac7ff]/40 focus:shadow-[0_0_0_4px_rgba(170,199,255,0.08)] transition-all"
+                      />
+                    </label>
+
+                    <label className="block">
+                      <span className="text-[11px] uppercase tracking-[0.28em] text-[#b5cbff] font-bold block mb-4">
+                        {isCompanyAccount ? 'Tax ID / Business ID' : 'ID / CI'}
+                      </span>
+                      <input
+                        required
+                        type="text"
+                        value={deliveryForm.taxId}
+                        onChange={(event) => setDeliveryForm((prev) => ({ ...prev, taxId: event.target.value }))}
+                        placeholder={isCompanyAccount ? 'Enter company tax ID' : 'Enter CI'}
+                        className="w-full rounded-2xl bg-[#0b1016] border border-white/5 px-6 py-5 text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-[#aac7ff]/40 focus:shadow-[0_0_0_4px_rgba(170,199,255,0.08)] transition-all"
+                      />
+                    </label>
+
+                    {deliveryError ? (
+                      <p className="md:col-span-2 rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+                        {deliveryError}
+                      </p>
+                    ) : null}
+
                     <div className="md:col-span-2 flex flex-col sm:flex-row gap-4 pt-2">
                       <button
                         type="submit"
+                        disabled={isSavingAddress}
                         className="inline-flex items-center justify-center rounded-2xl bg-gradient-to-br from-[#aac7ff] to-[#3e90ff] px-8 py-5 text-lg font-bold text-[#003064] shadow-[0_12px_35px_rgba(62,144,255,0.25)] transition-all hover:scale-[1.02] hover:shadow-[0_20px_45px_rgba(62,144,255,0.35)] active:scale-[0.99]"
                       >
-                        {editingContactId !== null ? 'Save Changes' : 'Save Contact'}
+                        {isSavingAddress ? 'Saving...' : editingContactId !== null ? 'Save Changes' : 'Save Contact'}
                       </button>
                       <button
                         type="button"
@@ -3154,6 +3909,18 @@ function Account({ onExit, onOpenOrders }: { onExit: () => void; onOpenOrders: (
                   </form>
                 )}
 
+                {isLoadingAddresses ? (
+                  <div className="rounded-[28px] border border-white/5 bg-white/[0.03] p-6 text-slate-400">
+                    Loading delivery contacts...
+                  </div>
+                ) : null}
+
+                {!isLoadingAddresses && deliveryContacts.length === 0 ? (
+                  <div className="rounded-[28px] border border-white/5 bg-white/[0.03] p-6 text-slate-400">
+                    No delivery contacts saved yet.
+                  </div>
+                ) : null}
+
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   {deliveryContacts.map((contact) => (
                     <div
@@ -3163,11 +3930,29 @@ function Account({ onExit, onOpenOrders }: { onExit: () => void; onOpenOrders: (
                       <div className="space-y-5">
                         <div className="flex items-start gap-4">
                           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#aac7ff]/10 text-[#aac7ff]">
+                            {isCompanyAccount ? <Building2 size={20} /> : <CircleUserRound size={20} />}
+                          </div>
+                          <div>
+                            {contact.label ? (
+                              <p className="mb-2 inline-flex items-center gap-2 rounded-full border border-[#aac7ff]/20 bg-[#aac7ff]/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.24em] text-[#cfe1ff]">
+                                <MapPinned size={12} />
+                                {contact.label}
+                              </p>
+                            ) : null}
+                            <p className="text-[11px] uppercase tracking-[0.28em] text-slate-500 font-bold mb-2">
+                              {isCompanyAccount ? 'Contact Person / Team' : 'Recipient'}
+                            </p>
+                            <p className="text-slate-200">{contact.contact_name ?? 'Not specified'}</p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-start gap-4">
+                          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#aac7ff]/10 text-[#aac7ff]">
                             <Mail size={20} />
                           </div>
                           <div>
                             <p className="text-[11px] uppercase tracking-[0.28em] text-slate-500 font-bold mb-2">Email</p>
-                            <p className="text-slate-200 break-all">{contact.email}</p>
+                            <p className="text-slate-200 break-all">{contact.contact_email ?? 'Not specified'}</p>
                           </div>
                         </div>
 
@@ -3177,7 +3962,7 @@ function Account({ onExit, onOpenOrders }: { onExit: () => void; onOpenOrders: (
                           </div>
                           <div>
                             <p className="text-[11px] uppercase tracking-[0.28em] text-slate-500 font-bold mb-2">Phone</p>
-                            <p className="text-slate-200">{contact.phone}</p>
+                            <p className="text-slate-200">{contact.contact_phone ?? 'Not specified'}</p>
                           </div>
                         </div>
 
@@ -3187,7 +3972,11 @@ function Account({ onExit, onOpenOrders }: { onExit: () => void; onOpenOrders: (
                           </div>
                           <div>
                             <p className="text-[11px] uppercase tracking-[0.28em] text-slate-500 font-bold mb-2">Address</p>
-                            <p className="text-slate-200">{contact.address}</p>
+                            <p className="text-slate-200">
+                              {[contact.street, contact.city, contact.state, contact.zip_code, contact.country]
+                                .filter(Boolean)
+                                .join(', ')}
+                            </p>
                           </div>
                         </div>
 
@@ -3196,22 +3985,62 @@ function Account({ onExit, onOpenOrders }: { onExit: () => void; onOpenOrders: (
                             <IdCard size={20} />
                           </div>
                           <div>
-                            <p className="text-[11px] uppercase tracking-[0.28em] text-slate-500 font-bold mb-2">CI</p>
-                            <p className="text-slate-200">{contact.ci}</p>
+                            <p className="text-[11px] uppercase tracking-[0.28em] text-slate-500 font-bold mb-2">
+                              {isCompanyAccount ? 'Tax ID / Business ID' : 'ID / CI'}
+                            </p>
+                            <p className="text-slate-200">{contact.tax_id ?? 'Not specified'}</p>
                           </div>
                         </div>
                       </div>
 
                       <div className="flex flex-col sm:flex-row gap-4 pt-6 mt-6 border-t border-white/5">
+                        {!contact.is_default ? (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (!authSession) {
+                                setDeliveryError('Your session expired. Please sign in again.');
+                                return;
+                              }
+
+                              try {
+                                const updated = await setDefaultUserAddressRequest(authSession.access_token, contact.id);
+                                setDeliveryContacts((prev) =>
+                                  prev.map((item) => ({
+                                    ...item,
+                                    is_default: item.id === updated.id,
+                                  }))
+                                );
+                              } catch (error) {
+                                setDeliveryError(error instanceof ApiError ? error.message : 'Unable to set the default address right now.');
+                              }
+                            }}
+                            className="inline-flex items-center justify-center gap-2 rounded-2xl border border-[#aac7ff]/20 bg-[#aac7ff]/8 px-5 py-4 text-sm font-bold text-[#d3e4ff] transition-all hover:bg-[#aac7ff]/14"
+                          >
+                            <Check size={16} />
+                            Set Default
+                          </button>
+                        ) : (
+                          <div className="inline-flex items-center justify-center gap-2 rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-5 py-4 text-sm font-bold text-emerald-200">
+                            <Check size={16} />
+                            Default Address
+                          </div>
+                        )}
                         <button
                           type="button"
                           onClick={() => {
                             setEditingContactId(contact.id);
                             setDeliveryForm({
-                              email: contact.email,
-                              phone: contact.phone,
-                              address: contact.address,
-                              ci: contact.ci,
+                              label: contact.label ?? '',
+                              contactName: contact.contact_name ?? '',
+                              email: contact.contact_email ?? '',
+                              phone: contact.contact_phone ?? '',
+                              street: contact.street,
+                              city: contact.city,
+                              state: contact.state ?? '',
+                              zipCode: contact.zip_code ?? '',
+                              country: contact.country,
+                              taxId: contact.tax_id ?? '',
                             });
                             setShowDeliveryForm(true);
                           }}
@@ -3222,7 +4051,19 @@ function Account({ onExit, onOpenOrders }: { onExit: () => void; onOpenOrders: (
                         </button>
                         <button
                           type="button"
-                          onClick={() => setDeliveryContacts((prev) => prev.filter((item) => item.id !== contact.id))}
+                          onClick={async () => {
+                            if (!authSession) {
+                              setDeliveryError('Your session expired. Please sign in again.');
+                              return;
+                            }
+
+                            try {
+                              await deleteUserAddressRequest(authSession.access_token, contact.id);
+                              setDeliveryContacts((prev) => prev.filter((item) => item.id !== contact.id));
+                            } catch (error) {
+                              setDeliveryError(error instanceof ApiError ? error.message : 'Unable to delete this delivery contact right now.');
+                            }
+                          }}
                           className="inline-flex items-center justify-center gap-2 rounded-2xl border border-[#f87171]/20 bg-[#f87171]/8 px-5 py-4 text-sm font-bold text-[#ffb2b2] transition-all hover:bg-[#f87171]/14"
                         >
                           <Trash2 size={16} />
@@ -3260,40 +4101,58 @@ function Account({ onExit, onOpenOrders }: { onExit: () => void; onOpenOrders: (
 
 
 function OrderHistory({
+  authSession,
   onBackToAccount,
   onGoHome,
+  onTrackOrder,
 }: {
+  authSession: AuthSession;
   onBackToAccount: () => void;
   onGoHome: () => void;
+  onTrackOrder: (orderId: string) => void;
   key?: string;
 }) {
-  const orders = [
-    {
-      id: 'HV-2026-001',
-      date: 'March 12, 2026',
-      total: '$1,458.00',
-      paymentType: 'Credit Card',
-      status: 'Delivered',
-      details: '2 items shipped to Miami, FL. Tracking completed and signed at delivery.',
-    },
-    {
-      id: 'HV-2026-002',
-      date: 'March 07, 2026',
-      total: '$349.00',
-      paymentType: 'Bank Transfer',
-      status: 'Cancelled',
-      details: 'Order cancelled before fulfillment. Refund issued to the original payment method.',
-    },
-    {
-      id: 'HV-2026-003',
-      date: 'February 28, 2026',
-      total: '$2,094.00',
-      paymentType: 'PayPal',
-      status: 'Processing',
-      details: 'Warehouse confirmation completed. Final packaging and dispatch are in progress.',
-    },
-  ];
-  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(orders[0].id);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  const [ordersError, setOrdersError] = useState<string | null>(null);
+  const [isLoadingOrders, setIsLoadingOrders] = useState(false);
+
+  useEffect(() => {
+    if (!authSession?.access_token) {
+      setOrders([]);
+      setSelectedOrderId(null);
+      setOrdersError(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadOrders = async () => {
+      setIsLoadingOrders(true);
+      setOrdersError(null);
+      try {
+        const nextOrders = await listOrdersRequest(authSession.access_token);
+        if (!cancelled) {
+          setOrders(nextOrders);
+          setSelectedOrderId(nextOrders[0]?.id ?? null);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setOrdersError(error instanceof ApiError ? error.message : 'Unable to load your order history right now.');
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoadingOrders(false);
+        }
+      }
+    };
+
+    void loadOrders();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authSession?.access_token]);
 
   return (
     <motion.div
@@ -3319,84 +4178,111 @@ function OrderHistory({
         </div>
 
         <div className="relative z-10 rounded-[32px] border border-white/5 bg-gradient-to-br from-[#20252d] via-[#1c2129] to-[#161b22] p-4 md:p-8 shadow-[0_30px_80px_rgba(0,0,0,0.35)]">
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-left">
-              <thead>
-                <tr className="border-b border-white/8">
-                  <th className="px-4 py-4 text-[11px] uppercase tracking-[0.28em] text-[#b5cbff] font-bold">Order No</th>
-                  <th className="px-4 py-4 text-[11px] uppercase tracking-[0.28em] text-[#b5cbff] font-bold">Date</th>
-                  <th className="px-4 py-4 text-[11px] uppercase tracking-[0.28em] text-[#b5cbff] font-bold">Total Price</th>
-                  <th className="px-4 py-4 text-[11px] uppercase tracking-[0.28em] text-[#b5cbff] font-bold">Payment Type</th>
-                  <th className="px-4 py-4 text-[11px] uppercase tracking-[0.28em] text-[#b5cbff] font-bold">Status</th>
-                  <th className="px-4 py-4 text-[11px] uppercase tracking-[0.28em] text-[#b5cbff] font-bold">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {orders.map((order) => (
-                  <tr key={order.id} className="border-b border-white/5 last:border-b-0">
-                    <td className="px-4 py-5 text-slate-100 font-semibold whitespace-nowrap">{order.id}</td>
-                    <td className="px-4 py-5 text-slate-300 whitespace-nowrap">{order.date}</td>
-                    <td className="px-4 py-5 text-slate-100 font-semibold whitespace-nowrap">{order.total}</td>
-                    <td className="px-4 py-5 text-slate-300 whitespace-nowrap">{order.paymentType}</td>
-                    <td className="px-4 py-5 whitespace-nowrap">
-                      <span
-                        className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${
-                          order.status === 'Delivered'
-                            ? 'bg-emerald-500/12 text-emerald-300'
-                            : order.status === 'Cancelled'
-                              ? 'bg-rose-500/12 text-rose-300'
-                              : 'bg-amber-500/12 text-amber-300'
-                        }`}
-                      >
-                        {order.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-5">
+          {isLoadingOrders ? (
+            <p className="mb-6 rounded-2xl border border-[#75d3ff]/20 bg-[#75d3ff]/10 px-4 py-3 text-sm text-[#d6f2ff]">Loading your orders...</p>
+          ) : null}
+          {ordersError ? (
+            <p className="mb-6 rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">{ordersError}</p>
+          ) : null}
+          {orders.length > 0 ? (
+            <>
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-left">
+                  <thead>
+                    <tr className="border-b border-white/8">
+                      <th className="px-4 py-4 text-[11px] uppercase tracking-[0.28em] text-[#b5cbff] font-bold">Order No</th>
+                      <th className="px-4 py-4 text-[11px] uppercase tracking-[0.28em] text-[#b5cbff] font-bold">Date</th>
+                      <th className="px-4 py-4 text-[11px] uppercase tracking-[0.28em] text-[#b5cbff] font-bold">Total Price</th>
+                      <th className="px-4 py-4 text-[11px] uppercase tracking-[0.28em] text-[#b5cbff] font-bold">Payment Type</th>
+                      <th className="px-4 py-4 text-[11px] uppercase tracking-[0.28em] text-[#b5cbff] font-bold">Status</th>
+                      <th className="px-4 py-4 text-[11px] uppercase tracking-[0.28em] text-[#b5cbff] font-bold">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {orders.map((order) => (
+                      <tr key={order.id} className="border-b border-white/5 last:border-b-0">
+                        <td className="px-4 py-5 text-slate-100 font-semibold whitespace-nowrap">{order.order_number}</td>
+                        <td className="px-4 py-5 text-slate-300 whitespace-nowrap">{new Date(order.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</td>
+                        <td className="px-4 py-5 text-slate-100 font-semibold whitespace-nowrap">{formatCurrency(Number(order.total_amount))}</td>
+                        <td className="px-4 py-5 text-slate-300 whitespace-nowrap">{order.payment_type}</td>
+                        <td className="px-4 py-5 whitespace-nowrap">
+                          <span
+                            className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${
+                              order.status === 'delivered'
+                                ? 'bg-emerald-500/12 text-emerald-300'
+                                : order.status === 'cancelled'
+                                  ? 'bg-rose-500/12 text-rose-300'
+                                  : 'bg-amber-500/12 text-amber-300'
+                            }`}
+                          >
+                            {order.status.replaceAll('_', ' ')}
+                          </span>
+                        </td>
+                        <td className="px-4 py-5">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedOrderId(order.id)}
+                            className="inline-flex items-center gap-2 rounded-2xl border border-white/10 px-4 py-3 text-sm font-bold text-slate-200 transition-all hover:bg-white/5"
+                          >
+                            <Eye size={16} />
+                            Details
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="mt-8 rounded-[28px] border border-white/5 bg-white/[0.03] p-6 md:p-8 backdrop-blur-sm">
+                {orders
+                  .filter((order) => order.id === selectedOrderId)
+                  .map((order) => (
+                    <div key={order.id}>
+                      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-5">
+                        <div>
+                          <span className="text-[11px] uppercase tracking-[0.28em] text-[#b5cbff] font-bold block mb-2">Selected Order</span>
+                          <h2 className="text-3xl font-bold tracking-tight text-slate-100">{order.order_number}</h2>
+                        </div>
+                        <span className="text-sm text-slate-400">Placed on {new Date(order.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</span>
+                      </div>
+                      <p className="text-slate-300 leading-relaxed mb-6">
+                        {order.items.length} item(s) shipping to {order.shipping_address.city}, {order.shipping_address.state}. Tracking code: {order.tracking_code ?? 'pending'}.
+                      </p>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="rounded-2xl border border-white/5 bg-[#0f141b]/80 p-5">
+                          <p className="text-[11px] uppercase tracking-[0.28em] text-slate-500 font-bold mb-2">Payment</p>
+                          <p className="text-slate-100 font-semibold">{order.payment_type}</p>
+                        </div>
+                        <div className="rounded-2xl border border-white/5 bg-[#0f141b]/80 p-5">
+                          <p className="text-[11px] uppercase tracking-[0.28em] text-slate-500 font-bold mb-2">Total</p>
+                          <p className="text-slate-100 font-semibold">{formatCurrency(Number(order.total_amount))}</p>
+                        </div>
+                        <div className="rounded-2xl border border-white/5 bg-[#0f141b]/80 p-5">
+                          <p className="text-[11px] uppercase tracking-[0.28em] text-slate-500 font-bold mb-2">Status</p>
+                          <p className="text-slate-100 font-semibold capitalize">{order.status.replaceAll('_', ' ')}</p>
+                        </div>
+                      </div>
                       <button
                         type="button"
-                        onClick={() => setSelectedOrderId(order.id)}
-                        className="inline-flex items-center gap-2 rounded-2xl border border-white/10 px-4 py-3 text-sm font-bold text-slate-200 transition-all hover:bg-white/5"
+                        onClick={() => onTrackOrder(order.id)}
+                        className="mt-6 inline-flex items-center gap-2 rounded-2xl border border-white/10 px-4 py-3 text-sm font-bold text-slate-200 transition-all hover:bg-white/5"
                       >
-                        <Eye size={16} />
-                        Details
+                        <Truck size={16} />
+                        Track Order
                       </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="mt-8 rounded-[28px] border border-white/5 bg-white/[0.03] p-6 md:p-8 backdrop-blur-sm">
-            {orders
-              .filter((order) => order.id === selectedOrderId)
-              .map((order) => (
-                <div key={order.id}>
-                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-5">
-                    <div>
-                      <span className="text-[11px] uppercase tracking-[0.28em] text-[#b5cbff] font-bold block mb-2">Selected Order</span>
-                      <h2 className="text-3xl font-bold tracking-tight text-slate-100">{order.id}</h2>
                     </div>
-                    <span className="text-sm text-slate-400">Placed on {order.date}</span>
-                  </div>
-                  <p className="text-slate-300 leading-relaxed mb-6">{order.details}</p>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="rounded-2xl border border-white/5 bg-[#0f141b]/80 p-5">
-                      <p className="text-[11px] uppercase tracking-[0.28em] text-slate-500 font-bold mb-2">Payment</p>
-                      <p className="text-slate-100 font-semibold">{order.paymentType}</p>
-                    </div>
-                    <div className="rounded-2xl border border-white/5 bg-[#0f141b]/80 p-5">
-                      <p className="text-[11px] uppercase tracking-[0.28em] text-slate-500 font-bold mb-2">Total</p>
-                      <p className="text-slate-100 font-semibold">{order.total}</p>
-                    </div>
-                    <div className="rounded-2xl border border-white/5 bg-[#0f141b]/80 p-5">
-                      <p className="text-[11px] uppercase tracking-[0.28em] text-slate-500 font-bold mb-2">Status</p>
-                      <p className="text-slate-100 font-semibold">{order.status}</p>
-                    </div>
-                  </div>
-                </div>
-              ))}
-          </div>
+                  ))}
+              </div>
+            </>
+          ) : !isLoadingOrders && !ordersError ? (
+            <div className="rounded-[28px] border border-dashed border-white/10 bg-white/[0.02] px-6 py-12 text-center">
+              <div className="text-2xl font-bold text-slate-100">No orders yet</div>
+              <p className="mx-auto mt-3 max-w-2xl text-lg leading-relaxed text-slate-400">
+                Once you complete your first purchase, your confirmed orders and tracking details will appear here.
+              </p>
+            </div>
+          ) : null}
 
           <div className="mt-8 flex flex-col sm:flex-row gap-4">
             <button

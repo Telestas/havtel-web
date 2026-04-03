@@ -6,6 +6,7 @@ dist/
 coverage/
 
 # Environment files
+.env
 .env*
 !.env.example
 

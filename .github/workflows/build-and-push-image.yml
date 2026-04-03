@@ -1,0 +1,148 @@
+name: Build And Push Container Image
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: container-publish-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Validate workflow ref
+        run: |
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ] && [ "${GITHUB_REF}" != "refs/heads/main" ]; then
+            echo "Manual executions are only allowed from the main branch."
+            exit 1
+          fi
+
+      - name: Ensure tag points to main
+        if: github.ref_type == 'tag'
+        run: |
+          git fetch origin main --depth=1
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" "origin/main"; then
+            echo "The pushed tag does not point to a commit contained in main."
+            exit 1
+          fi
+
+      - name: Validate frontend build configuration
+        env:
+          VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
+        run: |
+          if [ -z "$VITE_API_BASE_URL" ]; then
+            echo "VITE_API_BASE_URL is empty or not configured in repository variables."
+            exit 1
+          fi
+
+      - name: Compute image names
+        env:
+          REPO_OWNER: ${{ github.repository_owner }}
+          REPO_NAME: ${{ github.event.repository.name }}
+        run: |
+          echo "IMAGE_NAME=ghcr.io/${REPO_OWNER,,}/${REPO_NAME,,}" >> "$GITHUB_ENV"
+          echo "PACKAGE_NAME=${REPO_NAME,,}" >> "$GITHUB_ENV"
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            echo "KEEP_TAG=${GITHUB_REF_NAME}" >> "$GITHUB_ENV"
+          else
+            echo "KEEP_TAG=main" >> "$GITHUB_ENV"
+          fi
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push image
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          build-args: |
+            VITE_API_BASE_URL=${{ vars.VITE_API_BASE_URL }}
+          tags: |
+            ${{ env.IMAGE_NAME }}:latest
+            ${{ env.IMAGE_NAME }}:${{ env.KEEP_TAG }}
+
+      - name: Delete previous container versions
+        uses: actions/github-script@v8
+        env:
+          PACKAGE_NAME: ${{ env.PACKAGE_NAME }}
+          KEEP_TAG: ${{ env.KEEP_TAG }}
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const packageName = process.env.PACKAGE_NAME;
+            const keepTag = process.env.KEEP_TAG;
+            const packageType = "container";
+            const ownerType = context.payload.repository.owner.type;
+
+            const listVersions = ownerType === "Organization"
+              ? github.rest.packages.getAllPackageVersionsForPackageOwnedByOrg
+              : github.rest.packages.getAllPackageVersionsForPackageOwnedByUser;
+
+            const deleteVersion = ownerType === "Organization"
+              ? github.rest.packages.deletePackageVersionForOrg
+              : github.rest.packages.deletePackageVersionForUser;
+
+            const baseParams = ownerType === "Organization"
+              ? { org: owner, package_type: packageType, package_name: packageName }
+              : { username: owner, package_type: packageType, package_name: packageName };
+
+            let versions;
+            try {
+              versions = await github.paginate(listVersions, {
+                ...baseParams,
+                per_page: 100,
+              });
+            } catch (error) {
+              if (error.status === 404) {
+                core.info(`Package ${packageName} does not exist yet. Nothing to delete.`);
+                return;
+              }
+              throw error;
+            }
+
+            const taggedVersions = versions
+              .map((version) => ({
+                ...version,
+                tags: version.metadata?.container?.tags ?? [],
+              }))
+              .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+            let keptTaggedVersion = false;
+            for (const version of taggedVersions) {
+              const shouldKeep = version.tags.includes(keepTag) && !keptTaggedVersion;
+
+              if (shouldKeep) {
+                keptTaggedVersion = true;
+                core.info(`Keeping package version ${version.id} with tags: ${version.tags.join(", ")}`);
+                continue;
+              }
+
+              core.info(`Deleting package version ${version.id} with tags: ${version.tags.join(", ") || "(untagged)"}`);
+              await deleteVersion({
+                ...baseParams,
+                package_version_id: version.id,
+              });
+            }
