@@ -170,7 +170,7 @@ function mapApiProductToLocal(
     price,
     priceString: price > 0 ? formatCurrency(price) : 'N/A',
     tag: null,
-    img: null,
+    img: p.primary_image_url,
     category: cat?.name?.toUpperCase() ?? 'OTHER',
     categorySlug: cat?.slug ?? '',
     brand: cat?.name ?? '',

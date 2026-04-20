@@ -304,6 +304,7 @@ export type ProductListItem = {
   is_active: boolean;
   created_at: string;
   price_from: string | null;
+  primary_image_url: string | null;
 };
 
 export type ProductDetail = {
