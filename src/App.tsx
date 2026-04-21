@@ -155,6 +155,201 @@ function HavtelLogo({ height = 34, light = false }: { height?: number; light?: b
   );
 }
 
+function CheckoutHeader({
+  activeStep,
+  onGoHome,
+  onClose,
+  onBackToCart,
+  onBackToShipping,
+  onBackToPayment,
+  mode = 'checkout',
+}: {
+  activeStep: 'cart' | 'shipping' | 'payment' | 'review' | 'tracking';
+  onGoHome: () => void;
+  onClose: () => void;
+  onBackToCart?: () => void;
+  onBackToShipping?: () => void;
+  onBackToPayment?: () => void;
+  mode?: 'checkout' | 'tracking';
+}) {
+  const checkoutSteps = [
+    { id: 'cart', label: 'Cart', onClick: onBackToCart },
+    { id: 'shipping', label: 'Shipping', onClick: onBackToShipping },
+    { id: 'payment', label: 'Payment', onClick: onBackToPayment },
+    { id: 'review', label: 'Review', onClick: undefined },
+  ] as const;
+
+  return (
+    <header className="bg-[#1a3f6f] shadow-[0_8px_22px_rgba(26,63,111,0.18)]">
+      <div className="mx-auto flex h-20 max-w-[1600px] items-center justify-between px-8 md:px-12">
+        <button type="button" onClick={onGoHome}>
+          <HavtelLogo height={32} light />
+        </button>
+        <nav className="hidden md:flex items-center gap-10 text-sm">
+          {mode === 'tracking' ? (
+            <span className="border-b-2 border-white pb-1 text-xs font-bold uppercase tracking-[0.12em] text-white">
+              Tracking
+            </span>
+          ) : (
+            checkoutSteps.map((step) => {
+              const isActive = step.id === activeStep;
+              const isClickable = Boolean(step.onClick);
+
+              return (
+                <button
+                  key={step.id}
+                  type="button"
+                  onClick={step.onClick}
+                  disabled={!isClickable}
+                  className={`border-b-2 pb-1 text-xs font-bold uppercase tracking-[0.12em] transition-colors ${
+                    isActive
+                      ? 'border-white text-white'
+                      : isClickable
+                        ? 'border-transparent text-white/60 hover:text-white'
+                        : 'border-transparent text-white/45'
+                  }`}
+                >
+                  {step.label}
+                </button>
+              );
+            })
+          )}
+        </nav>
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded-full p-2 text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+          aria-label="Close checkout flow"
+        >
+          <X size={26} />
+        </button>
+      </div>
+    </header>
+  );
+}
+
+type RouteSnapshot = {
+  view: View;
+  productSlug: string | null;
+  trackedOrderId: string | null;
+};
+
+const normalizePath = (pathname: string) => {
+  if (!pathname || pathname === '/') {
+    return '/';
+  }
+
+  const trimmed = pathname.replace(/\/+$/, '');
+  return trimmed || '/';
+};
+
+const getRouteSnapshotFromPath = (pathname: string): RouteSnapshot => {
+  const path = normalizePath(pathname);
+  const productMatch = path.match(/^\/product\/([^/]+)$/);
+  if (productMatch) {
+    return {
+      view: 'product',
+      productSlug: decodeURIComponent(productMatch[1]),
+      trackedOrderId: null,
+    };
+  }
+
+  const trackingMatch = path.match(/^\/tracking\/([^/]+)$/);
+  if (trackingMatch) {
+    return {
+      view: 'tracking',
+      productSlug: null,
+      trackedOrderId: decodeURIComponent(trackingMatch[1]),
+    };
+  }
+
+  switch (path) {
+    case '/':
+      return { view: 'home', productSlug: null, trackedOrderId: null };
+    case '/store':
+      return { view: 'shop', productSlug: null, trackedOrderId: null };
+    case '/support':
+      return { view: 'support', productSlug: null, trackedOrderId: null };
+    case '/account':
+      return { view: 'account', productSlug: null, trackedOrderId: null };
+    case '/orders':
+      return { view: 'orders', productSlug: null, trackedOrderId: null };
+    case '/cart':
+      return { view: 'cart', productSlug: null, trackedOrderId: null };
+    case '/checkout/shipping':
+      return { view: 'shipping', productSlug: null, trackedOrderId: null };
+    case '/checkout/payment':
+      return { view: 'payment', productSlug: null, trackedOrderId: null };
+    case '/checkout/review':
+      return { view: 'review', productSlug: null, trackedOrderId: null };
+    case '/checkout/confirmed':
+      return { view: 'confirmed', productSlug: null, trackedOrderId: null };
+    case '/tracking':
+      return { view: 'tracking', productSlug: null, trackedOrderId: null };
+    case '/login':
+      return { view: 'login', productSlug: null, trackedOrderId: null };
+    case '/signup':
+      return { view: 'signup', productSlug: null, trackedOrderId: null };
+    case '/forgot-password':
+      return { view: 'forgot', productSlug: null, trackedOrderId: null };
+    case '/404':
+      return { view: 'notfound', productSlug: null, trackedOrderId: null };
+    default:
+      return { view: 'notfound', productSlug: null, trackedOrderId: null };
+  }
+};
+
+const getCurrentRouteSnapshot = (): RouteSnapshot => {
+  if (typeof window === 'undefined') {
+    return { view: 'home', productSlug: null, trackedOrderId: null };
+  }
+
+  return getRouteSnapshotFromPath(window.location.pathname);
+};
+
+const buildPathFromRoute = ({
+  view,
+  productSlug,
+  trackedOrderId,
+}: RouteSnapshot): string => {
+  switch (view) {
+    case 'home':
+      return '/';
+    case 'shop':
+      return '/store';
+    case 'support':
+      return '/support';
+    case 'account':
+      return '/account';
+    case 'orders':
+      return '/orders';
+    case 'cart':
+      return '/cart';
+    case 'shipping':
+      return '/checkout/shipping';
+    case 'payment':
+      return '/checkout/payment';
+    case 'review':
+      return '/checkout/review';
+    case 'confirmed':
+      return '/checkout/confirmed';
+    case 'tracking':
+      return trackedOrderId ? `/tracking/${encodeURIComponent(trackedOrderId)}` : '/tracking';
+    case 'product':
+      return productSlug ? `/product/${encodeURIComponent(productSlug)}` : '/store';
+    case 'login':
+      return '/login';
+    case 'signup':
+      return '/signup';
+    case 'forgot':
+      return '/forgot-password';
+    case 'notfound':
+      return '/404';
+    default:
+      return '/';
+  }
+};
+
 function mapApiProductToLocal(
   p: import('./lib/api').ProductListItem,
   categoryMap: Map<string, Category>,
@@ -179,8 +374,9 @@ function mapApiProductToLocal(
 }
 
 export default function App() {
-  const [view, setView] = useState<View>('home');
-  const [selectedProductSlug, setSelectedProductSlug] = useState<string | null>(null);
+  const initialRoute = getCurrentRouteSnapshot();
+  const [view, setView] = useState<View>(initialRoute.view);
+  const [selectedProductSlug, setSelectedProductSlug] = useState<string | null>(initialRoute.productSlug);
   const [notification, setNotification] = useState<string | null>(null);
   const [authSession, setAuthSession] = useState<AuthSession>(null);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -194,8 +390,9 @@ export default function App() {
   const [shippingMethod, setShippingMethod] = useState<'priority' | 'express'>('priority');
   const [checkoutShippingAddress, setCheckoutShippingAddress] = useState<CheckoutShippingAddress | null>(null);
   const [latestOrder, setLatestOrder] = useState<Order | null>(null);
-  const [trackedOrderId, setTrackedOrderId] = useState<string | null>(null);
+  const [trackedOrderId, setTrackedOrderId] = useState<string | null>(initialRoute.trackedOrderId);
   const isAuthenticated = authSession !== null;
+  const isPopNavigationRef = useRef(false);
 
   const cartCount = cartItems.reduce((total, item) => total + item.quantity, 0);
   const isCheckoutView =
@@ -272,6 +469,43 @@ export default function App() {
     setSelectedProductSlug(slug);
     setView('product');
   };
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const nextRoute = getCurrentRouteSnapshot();
+      isPopNavigationRef.current = true;
+      setView(nextRoute.view);
+      setSelectedProductSlug(nextRoute.productSlug);
+      setTrackedOrderId(nextRoute.trackedOrderId);
+    };
+
+    window.addEventListener('popstate', handlePopState);
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, []);
+
+  useEffect(() => {
+    const nextPath = buildPathFromRoute({
+      view,
+      productSlug: selectedProductSlug,
+      trackedOrderId,
+    });
+    const currentPath = normalizePath(window.location.pathname);
+
+    if (isPopNavigationRef.current) {
+      isPopNavigationRef.current = false;
+      if (currentPath !== nextPath) {
+        window.history.replaceState(null, '', nextPath);
+      }
+      return;
+    }
+
+    if (currentPath !== nextPath) {
+      window.history.pushState(null, '', nextPath);
+    }
+  }, [view, selectedProductSlug, trackedOrderId]);
 
   // Load products and categories from API
   useEffect(() => {
@@ -404,21 +638,6 @@ export default function App() {
     };
   }, []);
 
-  useEffect(() => {
-    const syncHashView = () => {
-      if (window.location.hash === '#404') {
-        setView('notfound');
-      }
-    };
-
-    syncHashView();
-    window.addEventListener('hashchange', syncHashView);
-
-    return () => {
-      window.removeEventListener('hashchange', syncHashView);
-    };
-  }, []);
-
   const persistSession = (session: AuthResponse | null) => {
     setAuthSession(session);
 
@@ -489,6 +708,7 @@ export default function App() {
     const taxAmount = subtotal * 0.0825;
 
     try {
+      setAuthError(null);
       const result = await checkoutRequest(authSession.access_token, {
         shipping_method: shippingMethod,
         shipping_amount: shippingAmount,
@@ -526,13 +746,19 @@ export default function App() {
           <HavtelLogo height={32} light />
         </button>
         <div className="hidden md:flex items-center gap-8">
-          {([['home', 'HOME'], ['shop', 'SHOP'], ['discover', 'DISCOVER'], ['support', 'SUPPORT'], ['preorder', 'PRE-ORDER']] as [View, string][]).map(([v, label]) => (
+          {[
+            { key: 'home', label: 'HOME', target: 'home' as View, active: view === 'home' },
+            { key: 'shop', label: 'SHOP', target: 'shop' as View, active: view === 'shop' || view === 'product' },
+            { key: 'discover', label: 'DISCOVER', target: 'shop' as View, active: false },
+            { key: 'support', label: 'SUPPORT', target: 'support' as View, active: view === 'support' },
+            { key: 'pre-order', label: 'PRE-ORDER', target: 'shop' as View, active: false },
+          ].map((item) => (
             <button
-              key={v}
-              onClick={() => setView(v as View)}
-              className={`text-xs font-bold tracking-[0.12em] transition-colors pb-1 ${view === v ? 'text-white border-b-2 border-white' : 'text-white/70 hover:text-white'}`}
+              key={item.key}
+              onClick={() => setView(item.target)}
+              className={`text-xs font-bold tracking-[0.12em] transition-colors pb-1 ${item.active ? 'text-white border-b-2 border-white' : 'text-white/70 hover:text-white'}`}
             >
-              {label}
+              {item.label}
             </button>
           ))}
         </div>
@@ -637,7 +863,6 @@ export default function App() {
           <Home key="home" products={products} onShopClick={() => setView('shop')} onProductSelect={openProduct} />
         ) : view === 'notfound' ? (
           <NotFoundView key="notfound" onGoHome={() => {
-            window.location.hash = '';
             setView('home');
           }} />
         ) : view === 'login' ? (
@@ -701,6 +926,7 @@ export default function App() {
             cartItems={cartItems}
             checkoutShippingAddress={checkoutShippingAddress}
             shippingMethod={shippingMethod}
+            errorMessage={authError}
             onClose={() => setView('home')}
             onGoHome={() => setView('home')}
             onBackToPayment={() => requireAuthForView('payment')}
@@ -907,43 +1133,23 @@ function ShoppingBagView({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="min-h-screen bg-[#0b1016] text-slate-100"
+      className="min-h-screen bg-[linear-gradient(90deg,#ffffff_0%,#fbf7f4_72%,#fff6df_100%)] text-[#1a3f6f]"
     >
-      <header className="border-b border-white/5 bg-[#10151d]/90 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-[1600px] items-center justify-between px-8 py-7 md:px-16">
-          <button type="button" onClick={onGoHome} className="text-2xl font-black tracking-tighter text-[#b5cbff]">
-            Havtel
-          </button>
-          <nav className="hidden md:flex items-center gap-10 text-sm">
-            {['Cart', 'Shipping', 'Payment', 'Review'].map((step, index) => (
-              <div
-                key={step}
-                className={`border-b-2 pb-2 ${index === 0 ? 'border-[#aac7ff] text-[#d6e4ff]' : 'border-transparent text-slate-400'}`}
-              >
-                {step}
-              </div>
-            ))}
-          </nav>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-full p-2 text-[#b5cbff] transition-colors hover:bg-white/5 hover:text-white"
-            aria-label="Close shopping bag"
-          >
-            <X size={28} />
-          </button>
-        </div>
-      </header>
+      <CheckoutHeader
+        activeStep="cart"
+        onGoHome={onGoHome}
+        onClose={onClose}
+      />
 
       <main className="mx-auto max-w-[1600px] px-8 py-14 md:px-16">
-        <div className="grid grid-cols-1 gap-10 xl:grid-cols-[minmax(0,1fr)_420px]">
+        <div className="grid grid-cols-1 gap-12 xl:grid-cols-[minmax(0,1fr)_440px]">
           <section>
             <div className="mb-10 flex items-end justify-between gap-6">
               <div>
-                <span className="mb-4 block text-xs font-bold uppercase tracking-[0.35em] text-[#aac7ff]">Your Selection</span>
-                <h1 className="text-5xl font-black tracking-tighter md:text-6xl">Shopping Cart</h1>
+                <span className="mb-4 block text-[12px] font-black uppercase tracking-[0.14em] text-[#5c95bd]">Your Selection</span>
+                <h1 className="text-5xl font-black uppercase tracking-[-0.08em] text-[#1f6dad] md:text-[84px] md:leading-[0.95]">Shopping Cart</h1>
               </div>
-              <div className="text-sm uppercase tracking-[0.25em] text-slate-400">
+              <div className="text-[14px] font-black uppercase tracking-[0.08em] text-[#5c95bd]">
                 {cartItems.reduce((count, item) => count + item.quantity, 0)} Items
               </div>
             </div>
@@ -952,15 +1158,15 @@ function ShoppingBagView({
               {cartItems.map((item) => (
                 <div
                   key={item.variantId}
-                  className="rounded-[28px] border border-white/5 bg-[#141b25] p-5 shadow-[0_24px_60px_rgba(0,0,0,0.22)] md:p-7"
+                  className="rounded-[22px] bg-[linear-gradient(90deg,#0f66a6_0%,#2c73aa_100%)] p-5 text-white shadow-[0_16px_34px_rgba(62,117,162,0.22)] md:p-7"
                 >
                   <div className="flex flex-col gap-6 md:flex-row md:items-center">
-                    <div className="h-40 w-full overflow-hidden rounded-2xl bg-[#0a0f14] md:h-36 md:w-40">
+                    <div className="h-40 w-full overflow-hidden rounded-[14px] bg-[linear-gradient(180deg,#8ec4e3_0%,#7db8dd_100%)] md:h-36 md:w-40">
                       {item.img ? (
                         <img
                           src={item.img}
                           alt={item.productName}
-                          className="h-full w-full object-cover"
+                          className="h-full w-full object-contain p-4"
                           referrerPolicy="no-referrer"
                         />
                       ) : null}
@@ -969,21 +1175,21 @@ function ShoppingBagView({
                     <div className="flex-1">
                       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                         <div>
-                          <h2 className="text-3xl font-bold tracking-tight text-slate-100">{item.productName}</h2>
-                          <p className="mt-2 text-lg text-slate-400">{item.variantName}</p>
+                          <h2 className="text-[34px] font-black tracking-[-0.05em] text-white">{item.productName}</h2>
+                          <p className="mt-2 text-[18px] italic text-white/85">{item.variantName}</p>
                         </div>
-                        <div className="text-3xl font-black text-[#aac7ff]">
+                        <div className="text-[34px] font-black tracking-[-0.05em] text-white">
                           {formatCurrency(item.price * item.quantity)}
                         </div>
                       </div>
 
                       <div className="mt-8 flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
-                        <div className="inline-flex items-center gap-6 rounded-full bg-[#0b1016] px-6 py-4">
-                          <button type="button" onClick={() => onDecreaseQuantity(item.variantId)} className="text-xl text-slate-300 transition-colors hover:text-white">
+                        <div className="inline-flex items-center gap-7 rounded-[16px] bg-[linear-gradient(90deg,#7eb7db_0%,#9cc7e2_100%)] px-7 py-4 shadow-[0_10px_20px_rgba(14,67,108,0.18)]">
+                          <button type="button" onClick={() => onDecreaseQuantity(item.variantId)} className="text-xl font-black text-white transition-colors hover:text-white/80">
                             <Minus size={18} />
                           </button>
-                          <span className="min-w-4 text-center text-lg font-bold text-slate-100">{item.quantity}</span>
-                          <button type="button" onClick={() => onIncreaseQuantity(item.variantId)} className="text-xl text-slate-300 transition-colors hover:text-white">
+                          <span className="min-w-4 text-center text-[22px] font-black text-white">{item.quantity}</span>
+                          <button type="button" onClick={() => onIncreaseQuantity(item.variantId)} className="text-xl font-black text-white transition-colors hover:text-white/80">
                             <Plus size={18} />
                           </button>
                         </div>
@@ -991,7 +1197,7 @@ function ShoppingBagView({
                         <button
                           type="button"
                           onClick={() => onRemoveItem(item.variantId)}
-                          className="inline-flex items-center gap-3 text-sm font-bold uppercase tracking-[0.2em] text-slate-400 transition-colors hover:text-white"
+                          className="inline-flex items-center gap-3 text-[15px] font-black uppercase tracking-[0.06em] text-white transition-colors hover:text-white/80"
                         >
                           <Trash2 size={16} />
                           Remove
@@ -1003,13 +1209,13 @@ function ShoppingBagView({
               ))}
 
               {cartItems.length === 0 && (
-                <div className="rounded-[28px] border border-white/5 bg-[#141b25] p-12 text-center">
-                  <h2 className="text-3xl font-bold tracking-tight text-slate-100 mb-3">Your shopping bag is empty</h2>
-                  <p className="text-slate-400 mb-8">Add products from the catalog to build your next HAVTEL order.</p>
+                <div className="rounded-[22px] border border-[#d6e4ec] bg-white p-12 text-center shadow-[0_16px_34px_rgba(107,154,187,0.12)]">
+                  <h2 className="mb-3 text-3xl font-black tracking-[-0.04em] text-[#1f6dad]">Your shopping bag is empty</h2>
+                  <p className="mb-8 text-[#5d95bc]">Add products from the catalog to build your next HAVTEL order.</p>
                   <button
                     type="button"
                     onClick={onGoHome}
-                    className="inline-flex items-center gap-3 rounded-2xl bg-gradient-to-br from-[#aac7ff] to-[#3e90ff] px-8 py-5 text-lg font-bold text-[#003064]"
+                    className="inline-flex items-center gap-3 rounded-[14px] bg-[linear-gradient(90deg,#0f5ca0_0%,#1d6ea9_100%)] px-8 py-5 text-lg font-black text-white shadow-[0_14px_30px_rgba(13,77,138,0.22)]"
                   >
                     Go to Home
                     <ArrowRight size={20} />
@@ -1019,53 +1225,53 @@ function ShoppingBagView({
             </div>
           </section>
 
-          <aside className="rounded-[32px] border border-white/5 bg-[#141b25] p-8 shadow-[0_30px_80px_rgba(0,0,0,0.3)] h-fit xl:sticky xl:top-10">
-            <h2 className="mb-10 text-4xl font-black tracking-tight text-slate-100">Order Summary</h2>
+          <aside className="h-fit rounded-[22px] border-[5px] border-[#7eb7db] bg-[rgba(255,250,241,0.92)] p-8 shadow-[0_16px_34px_rgba(107,154,187,0.16)] xl:sticky xl:top-10">
+            <h2 className="mb-10 text-[58px] font-black tracking-[-0.06em] text-[#1f6dad]">Order Summary</h2>
 
-            <div className="space-y-6 text-lg">
+            <div className="space-y-8 text-lg">
               <div className="flex items-center justify-between gap-4">
-                <span className="text-slate-300">Subtotal</span>
-                <span className="font-semibold text-slate-100">
+                <span className="text-[14px] font-black uppercase tracking-[0.08em] text-[#5c95bd]">Subtotal</span>
+                <span className="text-[16px] font-black text-[#1f6dad]">
                   {formatCurrency(subtotal)}
                 </span>
               </div>
               <div className="flex items-center justify-between gap-4">
-                <span className="text-slate-300">Shipping</span>
-                <span className="text-sm font-bold uppercase tracking-[0.22em] text-[#9dd6ff]">Calculated at next step</span>
+                <span className="text-[14px] font-black uppercase tracking-[0.08em] text-[#5c95bd]">Shipping</span>
+                <span className="text-[15px] font-black uppercase tracking-[0.06em] text-[#1f6dad]">Calculated at next step</span>
               </div>
               <div className="flex items-center justify-between gap-4">
-                <span className="text-slate-300">Tax</span>
-                <span className="font-semibold text-slate-100">
+                <span className="text-[14px] font-black uppercase tracking-[0.08em] text-[#5c95bd]">Estimated Tax</span>
+                <span className="text-[16px] font-black text-[#1f6dad]">
                   {formatCurrency(tax)}
                 </span>
               </div>
             </div>
 
-            <div className="my-8 border-t border-white/5"></div>
+            <div className="my-10 border-t border-[#7eb7db]"></div>
 
             <div className="flex items-end justify-between gap-4">
               <div>
-                <div className="text-2xl font-bold text-slate-100">Total</div>
+                <div className="text-[20px] font-black uppercase tracking-[0.06em] text-[#5c95bd]">Total</div>
               </div>
               <div className="text-right">
-                <div className="text-5xl font-black tracking-tight text-[#9ebeff]">
+                <div className="text-[72px] font-black tracking-[-0.08em] leading-none text-[#1f6dad]">
                   {formatCurrency(total)}
                 </div>
-                <div className="mt-2 text-sm uppercase tracking-[0.24em] text-slate-400">Including VAT</div>
+                <div className="mt-2 text-[12px] font-black uppercase tracking-[0.08em] text-[#5c95bd]">Including VAT</div>
               </div>
             </div>
 
             <div className="mt-10">
-              <label className="mb-4 block text-xs font-bold uppercase tracking-[0.3em] text-slate-400">
+              <label className="mb-4 block text-[14px] font-black uppercase tracking-[0.08em] text-[#5c95bd]">
                 Promotional Code
               </label>
               <div className="flex gap-3">
                 <input
                   type="text"
                   defaultValue="HAVTEL2026"
-                  className="min-w-0 flex-1 rounded-2xl border border-white/5 bg-[#0b1016] px-5 py-4 text-base text-slate-300 focus:outline-none focus:border-[#aac7ff]/40"
+                  className="min-w-0 flex-1 rounded-[16px] border border-[#d6e4ec] bg-[linear-gradient(90deg,#d7ebf5_0%,#cfe6f3_100%)] px-5 py-4 text-base font-bold text-white placeholder:text-white/80 focus:outline-none"
                 />
-                <button type="button" className="rounded-2xl bg-white/12 px-6 py-4 text-lg font-bold text-[#aac7ff] transition-colors hover:bg-white/18">
+                <button type="button" className="rounded-[16px] bg-[linear-gradient(90deg,#63a8d5_0%,#74b4db_100%)] px-6 py-4 text-lg font-black text-white shadow-[0_10px_24px_rgba(107,154,187,0.16)] transition-colors hover:opacity-95">
                   Apply
                 </button>
               </div>
@@ -1074,26 +1280,26 @@ function ShoppingBagView({
             <button
               type="button"
               onClick={onProceedToShipping}
-              className="mt-10 w-full rounded-[22px] bg-gradient-to-r from-[#a9c7ff] to-[#4d93f7] px-8 py-6 text-lg font-black uppercase tracking-[0.22em] text-[#02182d] shadow-[0_24px_60px_rgba(77,147,247,0.35)] transition-transform hover:scale-[1.01]"
+              className="mt-10 w-full rounded-[16px] bg-[linear-gradient(90deg,#0f5ca0_0%,#1d6ea9_100%)] px-8 py-6 text-[20px] font-black uppercase tracking-[0.06em] text-white shadow-[0_16px_30px_rgba(13,77,138,0.24)] transition-transform hover:scale-[1.01]"
             >
               Proceed to Checkout
             </button>
 
-            <div className="mt-10 flex items-center justify-center gap-8 text-slate-500">
+            <div className="mt-12 flex items-center justify-center gap-10 text-[#1f6dad]">
               <CreditCard size={24} />
               <Wallet size={24} />
               <ShieldCheck size={24} />
             </div>
-            <p className="mt-6 text-center text-sm uppercase tracking-[0.24em] text-slate-500">
+            <p className="mt-6 text-center text-[12px] font-black uppercase tracking-[0.06em] text-[#1f6dad]">
               Secure SSL encryption & data protection guaranteed
             </p>
           </aside>
         </div>
       </main>
 
-      <footer className="border-t border-white/5 px-8 py-10 text-sm uppercase tracking-[0.24em] text-slate-500 md:px-16">
+      <footer className="bg-[#1a3f6f] px-8 py-10 text-sm uppercase tracking-[0.16em] text-white/65 md:px-16">
         <div className="mx-auto flex max-w-[1600px] flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>© 2026 HAVTEL TECHNOLOGY. ALL RIGHTS RESERVED.</div>
+          <div>© 2026 HAVTEL CORP. All Rights Reserved</div>
           <div className="flex flex-wrap gap-6">
             <span>Privacy Policy</span>
             <span>Terms of Service</span>
@@ -1230,73 +1436,48 @@ function ShippingView({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="min-h-screen bg-[#0f141b] text-slate-100"
+      className="min-h-screen bg-[linear-gradient(90deg,#ffffff_0%,#fbf7f4_72%,#fff6df_100%)] text-[#1a3f6f]"
     >
-      <header className="border-b border-white/5 bg-[#10151d]/90 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-[1600px] items-center justify-between px-8 py-7 md:px-16">
-          <button type="button" onClick={onGoHome} className="text-2xl font-black tracking-tighter text-[#b5cbff]">
-            Havtel
-          </button>
-          <nav className="hidden md:flex items-center gap-10 text-sm">
-            {['Cart', 'Shipping', 'Payment', 'Review'].map((step, index) => (
-              <button
-                key={step}
-                type="button"
-                onClick={() => {
-                  if (index === 0) onBackToCart();
-                }}
-                className={`border-b-2 pb-2 ${
-                  index === 1 ? 'border-[#aac7ff] text-[#d6e4ff]' : index < 1 ? 'border-transparent text-slate-300 hover:text-white' : 'border-transparent text-slate-400'
-                }`}
-              >
-                {step}
-              </button>
-            ))}
-          </nav>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-full p-2 text-[#b5cbff] transition-colors hover:bg-white/5 hover:text-white"
-            aria-label="Close shipping"
-          >
-            <X size={28} />
-          </button>
-        </div>
-      </header>
+      <CheckoutHeader
+        activeStep="shipping"
+        onGoHome={onGoHome}
+        onClose={onClose}
+        onBackToCart={onBackToCart}
+      />
 
       <main className="mx-auto max-w-[1600px] px-8 py-14 md:px-16">
         <div className="grid grid-cols-1 gap-10 xl:grid-cols-[minmax(0,1fr)_400px]">
           <section>
             <div className="mb-10">
-              <h1 className="text-5xl font-black tracking-tighter md:text-6xl">Shipping Logistics</h1>
-              <p className="mt-5 max-w-2xl text-2xl leading-relaxed text-slate-400">
+              <h1 className="text-5xl font-black uppercase tracking-[-0.08em] text-[#1f6dad] md:text-[82px] md:leading-[0.95]">Shipping Logistics</h1>
+              <p className="mt-5 max-w-3xl text-[22px] italic leading-relaxed text-[#5d95bc]">
                 Precision delivery for high-performance hardware. Enter your coordinates below.
               </p>
             </div>
 
             <div className="mb-14 flex items-center gap-4 md:gap-6">
-              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#4d93f7] text-[#02182d]">
-                <div className="h-2.5 w-2.5 rounded-full bg-[#02182d]"></div>
+              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#1f6dad] text-white shadow-[0_0_0_8px_rgba(126,183,219,0.16)]">
+                <div className="h-2.5 w-2.5 rounded-full bg-white"></div>
               </div>
-              <div className="h-1 flex-1 rounded-full bg-[#4d93f7]"></div>
-              <div className="flex h-10 w-10 items-center justify-center rounded-full border border-[#a9c7ff]/30 bg-[#141b25] shadow-[0_0_20px_rgba(169,199,255,0.2)]">
-                <div className="h-3 w-3 rounded-full bg-[#a9c7ff]"></div>
+              <div className="h-1 flex-1 rounded-full bg-[#1f6dad]"></div>
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-[0_0_0_8px_rgba(126,183,219,0.16)]">
+                <div className="h-3 w-3 rounded-full bg-[#7eb7db]"></div>
               </div>
-              <div className="h-1 flex-1 rounded-full bg-white/10"></div>
-              <div className="h-1 flex-1 rounded-full bg-white/5"></div>
+              <div className="h-1 flex-1 rounded-full bg-[#8ec4e3]"></div>
+              <div className="h-1 flex-1 rounded-full bg-[#8ec4e3]"></div>
             </div>
 
             <form className="space-y-14">
               <div>
                 <div className="mb-8 flex items-center gap-4">
-                  <span className="inline-flex h-8 min-w-8 items-center justify-center rounded-lg bg-[#172131] px-2 text-xs font-black tracking-[0.2em] text-[#aac7ff]">00</span>
-                  <h2 className="text-4xl font-bold tracking-tight">Saved Addresses</h2>
+                  <span className="inline-flex h-8 min-w-8 items-center justify-center rounded-lg bg-[linear-gradient(180deg,#7eb7db_0%,#9bc8e2_100%)] px-2 text-xs font-black text-white shadow-[0_8px_18px_rgba(107,154,187,0.16)]">0</span>
+                  <h2 className="text-[30px] font-black tracking-[-0.04em] text-[#1f6dad]">Saved Addresses</h2>
                 </div>
                 {addressError ? (
-                  <p className="mb-6 rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">{addressError}</p>
+                  <p className="mb-6 rounded-2xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-600">{addressError}</p>
                 ) : null}
                 {isLoadingAddresses ? (
-                  <div className="rounded-[24px] border border-white/5 bg-[#0b1016] p-6 text-slate-400">Loading saved addresses...</div>
+                  <div className="rounded-[18px] border border-[#d6e4ec] bg-white p-6 text-[#5d95bc] shadow-[0_12px_28px_rgba(107,154,187,0.12)]">Loading saved addresses...</div>
                 ) : savedAddresses.length > 0 ? (
                   <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
                     {savedAddresses.map((address) => (
@@ -1304,31 +1485,31 @@ function ShippingView({
                         key={address.id}
                         type="button"
                         onClick={() => applyAddressToForm(address)}
-                        className={`rounded-[24px] border p-6 text-left transition-all ${
+                        className={`rounded-[18px] border p-6 text-left shadow-[0_12px_28px_rgba(107,154,187,0.12)] transition-all ${
                           selectedAddressId === address.id
-                            ? 'border-[#b9d1ff] bg-[#1b2129] shadow-[0_0_0_2px_rgba(185,209,255,0.15)]'
-                            : 'border-white/5 bg-[#0b1016]'
+                            ? 'border-[#7eb7db] bg-[linear-gradient(90deg,#0f66a6_0%,#2c73aa_100%)] text-white'
+                            : 'border-[#d6e4ec] bg-white text-[#1f6dad]'
                         }`}
                       >
                         <div className="flex items-start justify-between gap-4">
                           <div>
-                            <div className="text-xl font-bold text-slate-100">{address.label ?? 'Saved Address'}</div>
-                            <div className="mt-2 text-sm text-slate-400">{address.contact_name ?? 'No contact name'}</div>
+                            <div className="text-xl font-black">{address.label ?? 'Saved Address'}</div>
+                            <div className={`mt-2 text-sm ${selectedAddressId === address.id ? 'text-white/80' : 'text-[#5d95bc]'}`}>{address.contact_name ?? 'No contact name'}</div>
                           </div>
                           {address.is_default ? (
-                            <span className="rounded-full border border-emerald-400/20 bg-emerald-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-200">
+                            <span className={`rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] ${selectedAddressId === address.id ? 'bg-white/20 text-white' : 'bg-[#eaf6ff] text-[#1f6dad]'}`}>
                               Default
                             </span>
                           ) : null}
                         </div>
-                        <div className="mt-4 text-sm leading-relaxed text-slate-300">
+                        <div className={`mt-4 text-sm leading-relaxed ${selectedAddressId === address.id ? 'text-white/90' : 'text-[#5d95bc]'}`}>
                           {[address.street, address.city, address.state, address.zip_code, address.country].filter(Boolean).join(', ')}
                         </div>
                       </button>
                     ))}
                   </div>
                 ) : (
-                  <div className="rounded-[24px] border border-white/5 bg-[#0b1016] p-6 text-slate-400">
+                  <div className="rounded-[18px] border border-[#d6e4ec] bg-white p-6 text-[#5d95bc] shadow-[0_12px_28px_rgba(107,154,187,0.12)]">
                     No saved addresses found. You can still enter shipping details manually or add addresses from My Account.
                   </div>
                 )}
@@ -1336,28 +1517,28 @@ function ShippingView({
 
               <div>
                 <div className="mb-8 flex items-center gap-4">
-                  <span className="inline-flex h-8 min-w-8 items-center justify-center rounded-lg bg-[#172131] px-2 text-xs font-black tracking-[0.2em] text-[#aac7ff]">01</span>
-                  <h2 className="text-4xl font-bold tracking-tight">Contact Information</h2>
+                  <span className="inline-flex h-8 min-w-8 items-center justify-center rounded-lg bg-[linear-gradient(180deg,#7eb7db_0%,#9bc8e2_100%)] px-2 text-xs font-black text-white shadow-[0_8px_18px_rgba(107,154,187,0.16)]">1</span>
+                  <h2 className="text-[30px] font-black tracking-[-0.04em] text-[#1f6dad]">Contact Information</h2>
                 </div>
                 <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                   <label className="block">
-                    <span className="mb-4 block text-sm font-bold uppercase tracking-[0.24em] text-slate-300">Email Address</span>
+                    <span className="mb-4 block text-[13px] font-black uppercase tracking-[0.08em] text-[#5c95bd]">Email Address</span>
                     <input
                       type="email"
                       value={shippingForm.email}
                       onChange={(event) => setShippingForm((prev) => ({ ...prev, email: event.target.value }))}
                       placeholder="name@domain.tech"
-                      className="w-full rounded-2xl border border-white/5 bg-[#0b1016] px-6 py-5 text-xl text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-[#aac7ff]/40"
+                      className="w-full rounded-[14px] border border-[#d6e4ec] bg-[linear-gradient(90deg,#bfdcf0_0%,#d1e7f5_100%)] px-6 py-5 text-xl font-bold text-white placeholder:text-white/90 shadow-[0_10px_24px_rgba(107,154,187,0.12)] focus:outline-none"
                     />
                   </label>
                   <label className="block">
-                    <span className="mb-4 block text-sm font-bold uppercase tracking-[0.24em] text-slate-300">Phone Number</span>
+                    <span className="mb-4 block text-[13px] font-black uppercase tracking-[0.08em] text-[#5c95bd]">Phone Number</span>
                     <input
                       type="tel"
                       value={shippingForm.phone}
                       onChange={(event) => setShippingForm((prev) => ({ ...prev, phone: event.target.value }))}
                       placeholder="+1 (555) 000-0000"
-                      className="w-full rounded-2xl border border-white/5 bg-[#0b1016] px-6 py-5 text-xl text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-[#aac7ff]/40"
+                      className="w-full rounded-[14px] border border-[#d6e4ec] bg-[linear-gradient(90deg,#bfdcf0_0%,#d1e7f5_100%)] px-6 py-5 text-xl font-bold text-white placeholder:text-white/90 shadow-[0_10px_24px_rgba(107,154,187,0.12)] focus:outline-none"
                     />
                   </label>
                 </div>
@@ -1365,57 +1546,67 @@ function ShippingView({
 
               <div>
                 <div className="mb-8 flex items-center gap-4">
-                  <span className="inline-flex h-8 min-w-8 items-center justify-center rounded-lg bg-[#172131] px-2 text-xs font-black tracking-[0.2em] text-[#aac7ff]">02</span>
-                  <h2 className="text-4xl font-bold tracking-tight">Destination Details</h2>
+                  <span className="inline-flex h-8 min-w-8 items-center justify-center rounded-lg bg-[linear-gradient(180deg,#7eb7db_0%,#9bc8e2_100%)] px-2 text-xs font-black text-white shadow-[0_8px_18px_rgba(107,154,187,0.16)]">2</span>
+                  <h2 className="text-[30px] font-black tracking-[-0.04em] text-[#1f6dad]">Destination Details</h2>
                 </div>
                 <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                   <label className="block">
-                    <span className="mb-4 block text-sm font-bold uppercase tracking-[0.24em] text-slate-300">First Name</span>
+                    <span className="mb-4 block text-[13px] font-black uppercase tracking-[0.08em] text-[#5c95bd]">First Name</span>
                     <input
                       value={shippingForm.firstName}
                       onChange={(event) => setShippingForm((prev) => ({ ...prev, firstName: event.target.value }))}
-                      className="w-full rounded-2xl border border-white/5 bg-[#0b1016] px-6 py-5 text-xl text-slate-200 focus:outline-none focus:border-[#aac7ff]/40"
+                      placeholder="Enter your first name"
+                      className="w-full rounded-[14px] border border-[#d6e4ec] bg-[linear-gradient(90deg,#bfdcf0_0%,#d1e7f5_100%)] px-6 py-5 text-xl font-bold text-white placeholder:text-white/90 shadow-[0_10px_24px_rgba(107,154,187,0.12)] focus:outline-none"
                     />
                   </label>
                   <label className="block">
-                    <span className="mb-4 block text-sm font-bold uppercase tracking-[0.24em] text-slate-300">Last Name</span>
+                    <span className="mb-4 block text-[13px] font-black uppercase tracking-[0.08em] text-[#5c95bd]">Last Name</span>
                     <input
                       value={shippingForm.lastName}
                       onChange={(event) => setShippingForm((prev) => ({ ...prev, lastName: event.target.value }))}
-                      className="w-full rounded-2xl border border-white/5 bg-[#0b1016] px-6 py-5 text-xl text-slate-200 focus:outline-none focus:border-[#aac7ff]/40"
+                      placeholder="Enter your last name"
+                      className="w-full rounded-[14px] border border-[#d6e4ec] bg-[linear-gradient(90deg,#bfdcf0_0%,#d1e7f5_100%)] px-6 py-5 text-xl font-bold text-white placeholder:text-white/90 shadow-[0_10px_24px_rgba(107,154,187,0.12)] focus:outline-none"
                     />
                   </label>
                   <label className="block md:col-span-2">
-                    <span className="mb-4 block text-sm font-bold uppercase tracking-[0.24em] text-slate-300">Street Address</span>
+                    <span className="mb-4 block text-[13px] font-black uppercase tracking-[0.08em] text-[#5c95bd]">Stree Address</span>
                     <input
                       value={shippingForm.street}
                       onChange={(event) => setShippingForm((prev) => ({ ...prev, street: event.target.value }))}
                       placeholder="123 Tech Boulevard"
-                      className="w-full rounded-2xl border border-white/5 bg-[#0b1016] px-6 py-5 text-xl text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-[#aac7ff]/40"
+                      className="w-full rounded-[14px] border border-[#d6e4ec] bg-[linear-gradient(90deg,#bfdcf0_0%,#d1e7f5_100%)] px-6 py-5 text-xl font-bold text-white placeholder:text-white/90 shadow-[0_10px_24px_rgba(107,154,187,0.12)] focus:outline-none"
                     />
                   </label>
                   <label className="block">
-                    <span className="mb-4 block text-sm font-bold uppercase tracking-[0.24em] text-slate-300">City</span>
+                    <span className="mb-4 block text-[13px] font-black uppercase tracking-[0.08em] text-[#5c95bd]">City</span>
                     <input
                       value={shippingForm.city}
                       onChange={(event) => setShippingForm((prev) => ({ ...prev, city: event.target.value }))}
-                      className="w-full rounded-2xl border border-white/5 bg-[#0b1016] px-6 py-5 text-xl text-slate-200 focus:outline-none focus:border-[#aac7ff]/40"
+                      className="w-full rounded-[14px] border border-[#d6e4ec] bg-[linear-gradient(90deg,#bfdcf0_0%,#d1e7f5_100%)] px-6 py-5 text-xl font-bold text-white shadow-[0_10px_24px_rgba(107,154,187,0.12)] focus:outline-none"
                     />
                   </label>
                   <label className="block">
-                    <span className="mb-4 block text-sm font-bold uppercase tracking-[0.24em] text-slate-300">State / Province</span>
+                    <span className="mb-4 block text-[13px] font-black uppercase tracking-[0.08em] text-[#5c95bd]">State / Province</span>
                     <input
                       value={shippingForm.state}
                       onChange={(event) => setShippingForm((prev) => ({ ...prev, state: event.target.value }))}
-                      className="w-full rounded-2xl border border-white/5 bg-[#0b1016] px-6 py-5 text-xl text-slate-200 focus:outline-none focus:border-[#aac7ff]/40"
+                      className="w-full rounded-[14px] border border-[#d6e4ec] bg-[linear-gradient(90deg,#bfdcf0_0%,#d1e7f5_100%)] px-6 py-5 text-xl font-bold text-white shadow-[0_10px_24px_rgba(107,154,187,0.12)] focus:outline-none"
                     />
                   </label>
                   <label className="block">
-                    <span className="mb-4 block text-sm font-bold uppercase tracking-[0.24em] text-slate-300">Postal Code</span>
+                    <span className="mb-4 block text-[13px] font-black uppercase tracking-[0.08em] text-[#5c95bd]">Postal Code</span>
                     <input
                       value={shippingForm.postalCode}
                       onChange={(event) => setShippingForm((prev) => ({ ...prev, postalCode: event.target.value }))}
-                      className="w-full rounded-2xl border border-white/5 bg-[#0b1016] px-6 py-5 text-xl text-slate-200 focus:outline-none focus:border-[#aac7ff]/40"
+                      className="w-full rounded-[14px] border border-[#d6e4ec] bg-[linear-gradient(90deg,#bfdcf0_0%,#d1e7f5_100%)] px-6 py-5 text-xl font-bold text-white shadow-[0_10px_24px_rgba(107,154,187,0.12)] focus:outline-none"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="mb-4 block text-[13px] font-black uppercase tracking-[0.08em] text-[#5c95bd]">Country</span>
+                    <input
+                      value={shippingForm.country}
+                      onChange={(event) => setShippingForm((prev) => ({ ...prev, country: event.target.value }))}
+                      className="w-full rounded-[14px] border border-[#d6e4ec] bg-[linear-gradient(90deg,#bfdcf0_0%,#d1e7f5_100%)] px-6 py-5 text-xl font-bold text-white shadow-[0_10px_24px_rgba(107,154,187,0.12)] focus:outline-none"
                     />
                   </label>
                 </div>
@@ -1423,42 +1614,42 @@ function ShippingView({
 
               <div>
                 <div className="mb-8 flex items-center gap-4">
-                  <span className="inline-flex h-8 min-w-8 items-center justify-center rounded-lg bg-[#172131] px-2 text-xs font-black tracking-[0.2em] text-[#aac7ff]">03</span>
-                  <h2 className="text-4xl font-bold tracking-tight">Delivery Method</h2>
+                  <span className="inline-flex h-8 min-w-8 items-center justify-center rounded-lg bg-[linear-gradient(180deg,#7eb7db_0%,#9bc8e2_100%)] px-2 text-xs font-black text-white shadow-[0_8px_18px_rgba(107,154,187,0.16)]">3</span>
+                  <h2 className="text-[30px] font-black tracking-[-0.04em] text-[#1f6dad]">Delivery Method</h2>
                 </div>
                 <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                   <button
                     type="button"
                     onClick={() => onShippingMethodChange('priority')}
-                    className={`rounded-[24px] border p-6 text-left transition-all ${
+                    className={`rounded-[18px] border p-6 text-left shadow-[0_12px_28px_rgba(107,154,187,0.12)] transition-all ${
                       shippingMethod === 'priority'
-                        ? 'border-[#b9d1ff] bg-[#1b2129] shadow-[0_0_0_2px_rgba(185,209,255,0.15)]'
-                        : 'border-white/5 bg-[#0b1016]'
+                        ? 'border-[#7eb7db] bg-[linear-gradient(90deg,#0f66a6_0%,#2c73aa_100%)] text-white'
+                        : 'border-[#d6e4ec] bg-[linear-gradient(90deg,#bfdcf0_0%,#d1e7f5_100%)] text-[#1f6dad]'
                     }`}
                   >
                     <div className="flex items-center justify-between gap-4">
                       <div>
-                        <div className="text-3xl font-bold tracking-tight text-slate-100">Priority Tech-Ship</div>
-                        <div className="mt-2 text-xl text-slate-400">2-3 Business Days</div>
+                        <div className="text-3xl font-black tracking-[-0.04em]">Priority Tech-Ship</div>
+                        <div className={`mt-2 text-xl ${shippingMethod === 'priority' ? 'text-white/85' : 'text-[#5d95bc]'}`}>2-3 Business Days</div>
                       </div>
-                      <div className="text-2xl font-semibold text-[#b9d1ff]">$12.00</div>
+                      <div className="text-2xl font-black">$12.00</div>
                     </div>
                   </button>
                   <button
                     type="button"
                     onClick={() => onShippingMethodChange('express')}
-                    className={`rounded-[24px] border p-6 text-left transition-all ${
+                    className={`rounded-[18px] border p-6 text-left shadow-[0_12px_28px_rgba(107,154,187,0.12)] transition-all ${
                       shippingMethod === 'express'
-                        ? 'border-[#b9d1ff] bg-[#1b2129] shadow-[0_0_0_2px_rgba(185,209,255,0.15)]'
-                        : 'border-white/5 bg-[#0b1016]'
+                        ? 'border-[#7eb7db] bg-[linear-gradient(90deg,#0f66a6_0%,#2c73aa_100%)] text-white'
+                        : 'border-[#d6e4ec] bg-[linear-gradient(90deg,#bfdcf0_0%,#d1e7f5_100%)] text-[#1f6dad]'
                     }`}
                   >
                     <div className="flex items-center justify-between gap-4">
                       <div>
-                        <div className="text-3xl font-bold tracking-tight text-slate-100">Quantum Express</div>
-                        <div className="mt-2 text-xl text-slate-400">Next Day Guaranteed</div>
+                        <div className="text-3xl font-black tracking-[-0.04em]">Quantum Express</div>
+                        <div className={`mt-2 text-xl ${shippingMethod === 'express' ? 'text-white/85' : 'text-[#5d95bc]'}`}>Next Day Guaranteed</div>
                       </div>
-                      <div className="text-2xl font-semibold text-[#b9d1ff]">$35.00</div>
+                      <div className="text-2xl font-black">$35.00</div>
                     </div>
                   </button>
                 </div>
@@ -1468,7 +1659,7 @@ function ShippingView({
                 <button
                   type="button"
                   onClick={onBackToCart}
-                  className="rounded-[22px] border border-white/10 px-10 py-6 text-2xl font-bold text-slate-200 transition-colors hover:bg-white/5"
+                  className="rounded-[16px] bg-[linear-gradient(90deg,#6eaed4_0%,#78b5da_100%)] px-10 py-5 text-[20px] font-black text-white shadow-[0_14px_28px_rgba(107,154,187,0.18)]"
                 >
                   Back to Cart
                 </button>
@@ -1478,7 +1669,7 @@ function ShippingView({
                     onShippingAddressChange(shippingForm);
                     onProceedToPayment();
                   }}
-                  className="rounded-[22px] bg-gradient-to-r from-[#a9c7ff] to-[#4d93f7] px-10 py-6 text-2xl font-bold text-[#02182d] shadow-[0_24px_60px_rgba(77,147,247,0.35)] transition-transform hover:scale-[1.01]"
+                  className="rounded-[16px] bg-[linear-gradient(90deg,#0f5ca0_0%,#1d6ea9_100%)] px-10 py-5 text-[20px] font-black text-white shadow-[0_16px_30px_rgba(13,77,138,0.24)] transition-transform hover:scale-[1.01]"
                 >
                   Proceed to Payment
                 </button>
@@ -1487,68 +1678,68 @@ function ShippingView({
           </section>
 
           <aside className="space-y-8">
-            <div className="rounded-[32px] border border-white/5 bg-[#1d232c] p-7 shadow-[0_30px_80px_rgba(0,0,0,0.3)]">
-              <div className="mb-6 text-sm font-bold uppercase tracking-[0.32em] text-slate-300">Cart Configuration</div>
+            <div className="rounded-[22px] border-[5px] border-[#7eb7db] bg-[rgba(255,250,241,0.92)] p-6 shadow-[0_16px_34px_rgba(107,154,187,0.16)]">
+              <div className="mb-6 text-[14px] font-black uppercase tracking-[0.08em] text-[#5c95bd]">Cart Configuration</div>
               {summaryItem && (
                 <>
                   <div className="flex gap-5">
-                    <div className="h-24 w-24 overflow-hidden rounded-2xl bg-[#0b1016]">
-                      {summaryItem.img ? <img src={summaryItem.img} alt={summaryItem.productName} className="h-full w-full object-cover" referrerPolicy="no-referrer" /> : null}
+                    <div className="h-24 w-24 overflow-hidden rounded-[12px] bg-[linear-gradient(180deg,#8ec4e3_0%,#7db8dd_100%)]">
+                      {summaryItem.img ? <img src={summaryItem.img} alt={summaryItem.productName} className="h-full w-full object-contain p-2" referrerPolicy="no-referrer" /> : null}
                     </div>
                     <div>
-                      <h3 className="text-2xl font-bold tracking-tight text-slate-100">{summaryItem.productName}</h3>
-                      <p className="mt-2 text-base text-slate-400">{summaryItem.variantName}</p>
-                      <p className="mt-3 text-2xl font-black text-[#9dd6ff]">{formatCurrency(summaryItem.price * summaryItem.quantity)}</p>
+                      <h3 className="text-[22px] font-black tracking-[-0.04em] text-[#1f6dad]">{summaryItem.productName}</h3>
+                      <p className="mt-2 text-base italic text-[#5d95bc]">{summaryItem.variantName}</p>
+                      <p className="mt-3 text-[22px] font-black text-[#1f6dad]">{formatCurrency(summaryItem.price * summaryItem.quantity)}</p>
                     </div>
                   </div>
-                  <div className="my-7 border-t border-white/5"></div>
+                  <div className="my-7 border-t border-[#7eb7db]"></div>
                 </>
               )}
 
               <div className="space-y-4 text-lg">
                 <div className="flex items-center justify-between">
-                  <span className="text-slate-300">Subtotal</span>
-                  <span className="font-semibold text-slate-100">{formatCurrency(subtotal)}</span>
+                  <span className="text-[14px] font-black uppercase tracking-[0.08em] text-[#5c95bd]">Subtotal</span>
+                  <span className="font-black text-[#1f6dad]">{formatCurrency(subtotal)}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-slate-300">Shipping</span>
-                  <span className="font-semibold text-slate-100">{formatCurrency(shippingCost)}</span>
+                  <span className="text-[14px] font-black uppercase tracking-[0.08em] text-[#5c95bd]">Shipping</span>
+                  <span className="font-black text-[#1f6dad]">{formatCurrency(shippingCost)}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-slate-300">Tax (Est.)</span>
-                  <span className="font-semibold text-slate-100">{formatCurrency(tax)}</span>
+                  <span className="text-[14px] font-black uppercase tracking-[0.08em] text-[#5c95bd]">Tax (Est.)</span>
+                  <span className="font-black text-[#1f6dad]">{formatCurrency(tax)}</span>
                 </div>
               </div>
 
-              <div className="my-7 border-t border-white/5"></div>
+              <div className="my-7 border-t border-[#7eb7db]"></div>
 
               <div className="flex items-end justify-between gap-4">
-                <span className="text-sm font-bold uppercase tracking-[0.28em] text-[#b5cbff]">Grand Total</span>
-                <span className="text-5xl font-black tracking-tight text-slate-100">{formatCurrency(total)}</span>
+                <span className="text-[14px] font-black uppercase tracking-[0.08em] text-[#5c95bd]">Grand Total</span>
+                <span className="text-[56px] font-black tracking-[-0.06em] text-[#1f6dad]">{formatCurrency(total)}</span>
               </div>
             </div>
 
-            <div className="rounded-[28px] border border-white/5 bg-[#1b2129] p-7">
+            <div className="rounded-[18px] bg-[linear-gradient(90deg,#6eaed4_0%,#78b5da_100%)] p-7 text-white shadow-[0_16px_30px_rgba(107,154,187,0.18)]">
               <div className="flex items-center gap-5">
-                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#123246] text-[#9dd6ff]">
+                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white/20 text-white">
                   <ShieldCheck size={24} />
                 </div>
                 <div>
-                  <div className="text-xl font-bold text-slate-100">Encrypted Transaction</div>
-                  <div className="mt-1 text-sm text-slate-400">Havtel Secure Gate v2.4 Active</div>
+                  <div className="text-xl font-black">Encrypted Transaction</div>
+                  <div className="mt-1 text-sm text-white/85">Havtel Secure Gate v2.4 Active</div>
                 </div>
               </div>
             </div>
 
-            <div className="relative overflow-hidden rounded-[32px] border border-white/5 min-h-[250px] bg-[#0c1118]">
+            <div className="relative overflow-hidden rounded-[22px] min-h-[250px] bg-[#c9e2f0] shadow-[0_16px_30px_rgba(107,154,187,0.16)]">
               <img
                 src="https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1200&q=80"
                 alt="Hardware ecosystem"
-                className="absolute inset-0 h-full w-full object-cover opacity-75"
+                className="absolute inset-0 h-full w-full object-cover opacity-80"
                 referrerPolicy="no-referrer"
               />
-              <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(4,8,12,0.05),rgba(4,8,12,0.7))]"></div>
-              <div className="absolute bottom-6 left-6 text-sm font-bold uppercase tracking-[0.38em] text-[#d5e8ff]">
+              <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(95,149,188,0.12),rgba(15,65,101,0.45))]"></div>
+              <div className="absolute bottom-6 left-6 text-sm font-black uppercase tracking-[0.18em] text-white">
                 Hardware Ecosystem
               </div>
             </div>
@@ -1556,9 +1747,9 @@ function ShippingView({
         </div>
       </main>
 
-      <footer className="border-t border-white/5 px-8 py-10 text-sm uppercase tracking-[0.24em] text-slate-500 md:px-16">
+      <footer className="bg-[#1a3f6f] px-8 py-10 text-sm uppercase tracking-[0.16em] text-white/65 md:px-16">
         <div className="mx-auto flex max-w-[1600px] flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>© 2026 HAVTEL TECHNOLOGY. ALL RIGHTS RESERVED.</div>
+          <div>© 2026 HAVTEL CORP. All Rights Reserved</div>
           <div className="flex flex-wrap gap-6">
             <span>Privacy Policy</span>
             <span>Terms of Service</span>
@@ -1602,59 +1793,34 @@ function PaymentView({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="min-h-screen bg-[#0f141b] text-slate-100"
+      className="min-h-screen bg-[linear-gradient(90deg,#ffffff_0%,#fbf7f4_72%,#fff6df_100%)] text-[#1a3f6f]"
     >
-      <header className="border-b border-white/5 bg-[#10151d]/90 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-[1600px] items-center justify-between px-8 py-7 md:px-16">
-          <button type="button" onClick={onGoHome} className="text-2xl font-black tracking-tighter text-[#b5cbff]">
-            Havtel
-          </button>
-          <nav className="hidden md:flex items-center gap-10 text-sm">
-            {['Cart', 'Shipping', 'Payment', 'Review'].map((step, index) => (
-              <button
-                key={step}
-                type="button"
-                onClick={() => {
-                  if (index === 0) onBackToCart();
-                  if (index === 1) onBackToShipping();
-                }}
-                className={`border-b-2 pb-2 ${
-                  index === 2 ? 'border-[#aac7ff] text-[#d6e4ff]' : index < 2 ? 'border-transparent text-slate-300 hover:text-white' : 'border-transparent text-slate-400'
-                }`}
-              >
-                {step}
-              </button>
-            ))}
-          </nav>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-full p-2 text-[#b5cbff] transition-colors hover:bg-white/5 hover:text-white"
-            aria-label="Close payment"
-          >
-            <X size={28} />
-          </button>
-        </div>
-      </header>
+      <CheckoutHeader
+        activeStep="payment"
+        onGoHome={onGoHome}
+        onClose={onClose}
+        onBackToCart={onBackToCart}
+        onBackToShipping={onBackToShipping}
+      />
 
       <main className="mx-auto max-w-[1600px] px-8 py-14 md:px-16">
         <div className="grid grid-cols-1 gap-10 xl:grid-cols-[minmax(0,1fr)_430px]">
           <section className="space-y-10">
             <div>
-              <h1 className="text-5xl font-black tracking-tighter text-slate-100 drop-shadow-[0_0_18px_rgba(169,199,255,0.18)] md:text-6xl">
-                Payment Method
-              </h1>
-              <p className="mt-5 max-w-3xl text-2xl text-slate-400">
+              <h1 className="text-5xl font-black uppercase tracking-[-0.08em] text-[#1f6dad] md:text-[82px] md:leading-[0.95]">Payment Method</h1>
+              <p className="mt-5 max-w-3xl text-[22px] italic leading-relaxed text-[#5d95bc]">
                 Select your preferred way to complete the acquisition.
               </p>
             </div>
 
-            <div className="inline-flex rounded-[22px] bg-[#171d26] p-2">
+            <div className="inline-flex rounded-[18px] bg-[linear-gradient(90deg,#bfdcf0_0%,#d1e7f5_100%)] p-2 shadow-[0_12px_28px_rgba(107,154,187,0.12)]">
               <button
                 type="button"
                 onClick={() => setPaymentMethod('card')}
-                className={`inline-flex items-center gap-3 rounded-[18px] px-10 py-5 text-2xl font-bold transition-all ${
-                  paymentMethod === 'card' ? 'bg-[#232a34] text-[#b9d1ff]' : 'text-slate-300 hover:text-white'
+                className={`inline-flex items-center gap-3 rounded-[14px] px-10 py-5 text-[20px] font-black transition-all ${
+                  paymentMethod === 'card'
+                    ? 'bg-[linear-gradient(90deg,#6eaed4_0%,#78b5da_100%)] text-white shadow-[0_10px_24px_rgba(107,154,187,0.16)]'
+                    : 'text-[#1f6dad] hover:text-[#0f5ca0]'
                 }`}
               >
                 <CreditCard size={22} />
@@ -1663,8 +1829,10 @@ function PaymentView({
               <button
                 type="button"
                 onClick={() => setPaymentMethod('paypal')}
-                className={`inline-flex items-center gap-3 rounded-[18px] px-10 py-5 text-2xl font-bold transition-all ${
-                  paymentMethod === 'paypal' ? 'bg-[#232a34] text-[#b9d1ff]' : 'text-slate-300 hover:text-white'
+                className={`inline-flex items-center gap-3 rounded-[14px] px-10 py-5 text-[20px] font-black transition-all ${
+                  paymentMethod === 'paypal'
+                    ? 'bg-[linear-gradient(90deg,#6eaed4_0%,#78b5da_100%)] text-white shadow-[0_10px_24px_rgba(107,154,187,0.16)]'
+                    : 'text-[#1f6dad] hover:text-[#0f5ca0]'
                 }`}
               >
                 <Wallet size={22} />
@@ -1672,54 +1840,54 @@ function PaymentView({
               </button>
             </div>
 
-            <div className="rounded-[30px] border border-white/5 bg-[#20252d] p-8 md:p-10">
+            <div className="rounded-[22px] bg-[linear-gradient(90deg,#6eaed4_0%,#78b5da_100%)] p-8 text-white shadow-[0_16px_34px_rgba(107,154,187,0.2)] md:p-10">
               <div className="grid grid-cols-1 gap-8">
                 <label className="block">
-                  <span className="mb-4 block text-sm font-bold uppercase tracking-[0.26em] text-slate-300">Cardholder Name</span>
+                  <span className="mb-4 block text-[13px] font-black uppercase tracking-[0.08em] text-white">Cardholder Name</span>
                   <input
                     type="text"
                     placeholder="ALEXANDER VANCE"
-                    className="w-full rounded-2xl border border-white/5 bg-[#0b1016] px-7 py-5 text-2xl text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-[#aac7ff]/40"
+                    className="w-full rounded-[14px] border border-[#2c73aa] bg-[linear-gradient(90deg,#0f5ca0_0%,#2c73aa_100%)] px-7 py-5 text-[22px] text-white placeholder:text-white/90 shadow-[0_10px_24px_rgba(14,67,108,0.2)] focus:outline-none"
                   />
                 </label>
 
                 <label className="block">
-                  <span className="mb-4 block text-sm font-bold uppercase tracking-[0.26em] text-slate-300">Card Number</span>
-                  <div className="flex items-center rounded-2xl border border-white/5 bg-[#0b1016] px-7 py-5">
+                  <span className="mb-4 block text-[13px] font-black uppercase tracking-[0.08em] text-white">Card Number</span>
+                  <div className="flex items-center rounded-[14px] border border-[#2c73aa] bg-[linear-gradient(90deg,#0f5ca0_0%,#2c73aa_100%)] px-7 py-5 shadow-[0_10px_24px_rgba(14,67,108,0.2)]">
                     <input
                       type="text"
                       placeholder="0000 0000 0000 0000"
-                      className="w-full bg-transparent text-2xl text-slate-200 placeholder:text-slate-600 focus:outline-none"
+                      className="w-full bg-transparent text-[22px] text-white placeholder:text-white/90 focus:outline-none"
                     />
-                    <CreditCard size={24} className="text-slate-500" />
+                    <CreditCard size={24} className="text-white/80" />
                   </div>
                 </label>
 
                 <div className="grid grid-cols-1 gap-8 md:grid-cols-2">
                   <label className="block">
-                    <span className="mb-4 block text-sm font-bold uppercase tracking-[0.26em] text-slate-300">Expiry Date</span>
+                    <span className="mb-4 block text-[13px] font-black uppercase tracking-[0.08em] text-white">Expiry Date</span>
                     <input
                       type="text"
-                      placeholder="MM / YY"
-                      className="w-full rounded-2xl border border-white/5 bg-[#0b1016] px-7 py-5 text-2xl text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-[#aac7ff]/40"
+                      placeholder="alejandrobarrera99@gmail.com"
+                      className="w-full rounded-[14px] border border-[#d6e4ec] bg-white px-7 py-5 text-[22px] text-[#1f5078] placeholder:text-[#1f5078] shadow-[0_10px_24px_rgba(107,154,187,0.12)] focus:outline-none"
                     />
                   </label>
                   <label className="block">
-                    <span className="mb-4 block text-sm font-bold uppercase tracking-[0.26em] text-slate-300">CVV</span>
+                    <span className="mb-4 block text-[13px] font-black uppercase tracking-[0.08em] text-white">CVV</span>
                     <input
                       type="password"
-                      placeholder="•••"
-                      className="w-full rounded-2xl border border-white/5 bg-[#0b1016] px-7 py-5 text-2xl text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-[#aac7ff]/40"
+                      placeholder="•••••••••"
+                      className="w-full rounded-[14px] border border-[#d6e4ec] bg-white px-7 py-5 text-[22px] text-[#1f5078] placeholder:text-[#1f5078] shadow-[0_10px_24px_rgba(107,154,187,0.12)] focus:outline-none"
                     />
                   </label>
                 </div>
 
-                <label className="inline-flex items-center gap-4 pt-2 text-xl text-slate-300">
+                <label className="inline-flex items-center gap-4 pt-2 text-[18px] font-black text-white">
                   <button
                     type="button"
                     onClick={() => setSaveCard((prev) => !prev)}
-                    className={`flex h-8 w-8 items-center justify-center rounded-lg border transition-colors ${
-                      saveCard ? 'border-[#5878b8] bg-[#253651] text-[#b5cbff]' : 'border-white/10 bg-[#0f141b] text-transparent'
+                    className={`flex h-8 w-8 items-center justify-center rounded-[8px] border transition-colors ${
+                      saveCard ? 'border-white/40 bg-[#2c73aa] text-white' : 'border-white/30 bg-white/10 text-transparent'
                     }`}
                   >
                     <span className="text-base">✓</span>
@@ -1729,14 +1897,14 @@ function PaymentView({
               </div>
             </div>
 
-            <div className="rounded-[28px] border border-white/5 bg-[#161c24] p-8">
+            <div className="rounded-[22px] bg-[linear-gradient(90deg,#bfdcf0_0%,#d1e7f5_100%)] p-8 shadow-[0_16px_30px_rgba(107,154,187,0.12)]">
               <div className="flex items-center gap-5">
-                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[#263246] text-[#b5cbff]">
-                  <Lock size={28} />
+                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[#0f5ca0] text-white">
+                  <Lock size={30} />
                 </div>
                 <div>
-                  <div className="text-2xl font-bold text-slate-100">Secure Encryption Active</div>
-                  <div className="mt-2 text-xl text-slate-400">
+                  <div className="text-[22px] font-black text-white">Secure Encryption Active</div>
+                  <div className="mt-2 text-[18px] text-white/90">
                     Your financial data is processed via 256-bit AES military-grade encryption.
                   </div>
                 </div>
@@ -1745,68 +1913,68 @@ function PaymentView({
           </section>
 
           <aside className="space-y-8">
-            <div className="rounded-[32px] border border-white/5 bg-[#232831] p-8 shadow-[0_30px_80px_rgba(0,0,0,0.3)]">
-              <h2 className="mb-10 text-4xl font-black tracking-tight text-[#b9d1ff]">Order Manifest</h2>
+            <div className="rounded-[22px] border-[5px] border-[#7eb7db] bg-[rgba(255,250,241,0.92)] p-8 shadow-[0_16px_34px_rgba(107,154,187,0.16)]">
+              <h2 className="mb-10 text-[56px] font-black tracking-[-0.06em] text-[#1f6dad]">Order Manifest</h2>
               {summaryItem && (
                 <>
                   <div className="flex gap-5">
-                    <div className="h-28 w-28 overflow-hidden rounded-2xl bg-[#0b1016]">
-                      {summaryItem.img ? <img src={summaryItem.img} alt={summaryItem.productName} className="h-full w-full object-cover" referrerPolicy="no-referrer" /> : null}
+                    <div className="h-28 w-28 overflow-hidden rounded-[12px] bg-[linear-gradient(180deg,#8ec4e3_0%,#7db8dd_100%)]">
+                      {summaryItem.img ? <img src={summaryItem.img} alt={summaryItem.productName} className="h-full w-full object-contain p-2" referrerPolicy="no-referrer" /> : null}
                     </div>
                     <div>
-                      <h3 className="text-2xl font-bold tracking-tight text-slate-100">{summaryItem.productName}</h3>
-                      <p className="mt-2 text-xl text-slate-400">{summaryItem.variantName}</p>
-                      <p className="mt-3 text-2xl font-black text-[#9dd6ff]">{formatCurrency(summaryItem.price * summaryItem.quantity)}</p>
+                      <h3 className="text-[22px] font-black tracking-[-0.04em] text-[#1f6dad]">{summaryItem.productName}</h3>
+                      <p className="mt-2 text-[18px] italic text-[#5d95bc]">{summaryItem.variantName}</p>
+                      <p className="mt-3 text-[22px] font-black text-[#1f6dad]">{formatCurrency(summaryItem.price * summaryItem.quantity)}</p>
                     </div>
                   </div>
-                  <div className="my-8 border-t border-white/5"></div>
+                  <div className="my-8 border-t border-[#7eb7db]"></div>
                 </>
               )}
 
               <div className="space-y-5 text-xl">
                 <div className="flex items-center justify-between">
-                  <span className="text-slate-300">Subtotal</span>
-                  <span className="text-slate-100">{formatCurrency(subtotal)}</span>
+                  <span className="text-[14px] font-black uppercase tracking-[0.08em] text-[#5c95bd]">Subtotal</span>
+                  <span className="font-black text-[#1f6dad]">{formatCurrency(subtotal)}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-slate-300">Shipping ({shippingLabel})</span>
-                  <span className="text-[#9dd6ff]">{formatCurrency(shippingCost)}</span>
+                  <span className="text-[14px] font-black uppercase tracking-[0.08em] text-[#5c95bd]">Shipping</span>
+                  <span className="font-black text-[#1f6dad]">{formatCurrency(shippingCost)}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-slate-300">Estimated Taxes</span>
-                  <span className="text-slate-100">{formatCurrency(tax)}</span>
+                  <span className="text-[14px] font-black uppercase tracking-[0.08em] text-[#5c95bd]">Estimated Tax</span>
+                  <span className="font-black text-[#1f6dad]">{formatCurrency(tax)}</span>
                 </div>
               </div>
 
-              <div className="my-8 border-t border-white/5"></div>
+              <div className="my-8 border-t border-[#7eb7db]"></div>
 
               <div className="flex items-end justify-between gap-4">
-                <span className="text-2xl text-slate-300">Total Amount</span>
-                <span className="text-6xl font-black tracking-tight text-[#a9c7ff]">{formatCurrency(total)}</span>
+                <span className="text-[20px] font-black uppercase tracking-[0.06em] text-[#5c95bd]">Total Amount</span>
+                <span className="text-[72px] font-black tracking-[-0.08em] leading-none text-[#1f6dad]">{formatCurrency(total)}</span>
               </div>
 
               <button
                 type="button"
                 onClick={onProceedToReview}
-                className="mt-10 w-full rounded-[24px] bg-gradient-to-r from-[#a9c7ff] to-[#4d93f7] px-8 py-6 text-2xl font-bold text-[#03192f] shadow-[0_24px_60px_rgba(77,147,247,0.35)] transition-transform hover:scale-[1.01]"
+                className="mt-10 w-full rounded-[16px] bg-[linear-gradient(90deg,#0f5ca0_0%,#1d6ea9_100%)] px-8 py-6 text-[20px] font-black text-white shadow-[0_16px_30px_rgba(13,77,138,0.24)] transition-transform hover:scale-[1.01]"
               >
                 Confirm Acquisition →
               </button>
 
-              <p className="mt-8 text-center text-sm uppercase tracking-[0.32em] text-slate-400">
+              <p className="mt-8 text-center text-[12px] font-black uppercase tracking-[0.06em] text-[#1f6dad]">
                 By clicking, you agree to the Havtel protocols
               </p>
             </div>
 
-            <div className="rounded-[28px] border border-cyan-500/25 bg-[#10303c] p-7">
+            <div className="rounded-[18px] bg-[linear-gradient(90deg,#bfdcf0_0%,#d1e7f5_100%)] p-7 shadow-[0_16px_30px_rgba(107,154,187,0.12)]">
               <div className="flex items-center justify-between gap-5">
                 <div className="flex items-center gap-4">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#0f4354] text-[#a6ecff]">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white text-[#1f6dad] shadow-[0_10px_20px_rgba(107,154,187,0.12)]">
                     <BadgePercent size={22} />
                   </div>
-                  <span className="text-2xl text-slate-100">Apply Protocol Code</span>
+                  <span className="text-[20px] font-black text-white">Apply Protocol Code</span>
                 </div>
-                <button type="button" className="flex h-11 w-11 items-center justify-center rounded-full border border-cyan-300/25 bg-[#174758] text-[#a6ecff] text-2xl">
+                <button type="button" className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-[#1f6dad] text-2xl shadow-[0_10px_20px_rgba(107,154,187,0.12)]">
                   +
                 </button>
               </div>
@@ -1815,9 +1983,9 @@ function PaymentView({
         </div>
       </main>
 
-      <footer className="border-t border-white/5 px-8 py-10 text-sm uppercase tracking-[0.24em] text-slate-500 md:px-16">
+      <footer className="bg-[#1a3f6f] px-8 py-10 text-sm uppercase tracking-[0.16em] text-white/65 md:px-16">
         <div className="mx-auto flex max-w-[1600px] flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>© 2026 HAVTEL TECHNOLOGY. ALL RIGHTS RESERVED.</div>
+          <div>© 2026 HAVTEL CORP. All Rights Reserved</div>
           <div className="flex flex-wrap gap-6">
             <span>Privacy Policy</span>
             <span>Terms of Service</span>
@@ -1833,6 +2001,7 @@ function ReviewView({
   cartItems,
   checkoutShippingAddress,
   shippingMethod,
+  errorMessage,
   onClose,
   onGoHome,
   onBackToPayment,
@@ -1843,6 +2012,7 @@ function ReviewView({
   cartItems: CartItem[];
   checkoutShippingAddress: CheckoutShippingAddress | null;
   shippingMethod: 'priority' | 'express';
+  errorMessage: string | null;
   onClose: () => void;
   onGoHome: () => void;
   onBackToPayment: () => void;
@@ -1863,77 +2033,62 @@ function ReviewView({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="min-h-screen bg-white text-[#1a3f6f]"
+      className="min-h-screen bg-[linear-gradient(90deg,#ffffff_0%,#fbf7f4_72%,#fff6df_100%)] text-[#1a3f6f]"
     >
-      <header className="bg-[#1a3f6f]">
-        <div className="mx-auto flex max-w-[1600px] items-center justify-between px-8 py-5 md:px-16">
-          <button type="button" onClick={onGoHome}>
-            <HavtelLogo height={30} light />
-          </button>
-          <nav className="hidden md:flex items-center gap-10 text-sm">
-            {['Cart', 'Shipping', 'Payment', 'Review'].map((step, index) => (
-              <button
-                key={step}
-                type="button"
-                onClick={() => {
-                  if (index === 0) onBackToCart();
-                  if (index === 1) onBackToShipping();
-                  if (index === 2) onBackToPayment();
-                }}
-                className={`border-b-2 pb-2 font-bold tracking-[0.08em] uppercase text-xs transition-colors ${
-                  index === 3 ? 'border-white text-white' : 'border-transparent text-white/60 hover:text-white'
-                }`}
-              >
-                {step}
-              </button>
-            ))}
-          </nav>
-          <button type="button" onClick={onClose} className="rounded-full p-2 text-white/70 transition-colors hover:bg-white/10 hover:text-white">
-            <X size={24} />
-          </button>
-        </div>
-      </header>
+      <CheckoutHeader
+        activeStep="review"
+        onGoHome={onGoHome}
+        onClose={onClose}
+        onBackToCart={onBackToCart}
+        onBackToShipping={onBackToShipping}
+        onBackToPayment={onBackToPayment}
+      />
 
       <main className="mx-auto max-w-[1600px] px-8 py-14 md:px-16">
         <div className="grid grid-cols-1 gap-10 xl:grid-cols-[minmax(0,1fr)_380px]">
           <section>
-            <div className="mb-10 max-w-3xl">
-              <h1 className="text-5xl font-black tracking-tight uppercase md:text-6xl text-[#1a3f6f]">Review Your Order</h1>
-              <p className="mt-4 text-lg leading-relaxed text-[#4a5c72] italic">
+            <div className="mb-10 max-w-4xl">
+              <h1 className="text-5xl font-black uppercase tracking-[-0.08em] text-[#1f6dad] md:text-[82px] md:leading-[0.95]">Review Your Order</h1>
+              <p className="mt-4 max-w-4xl text-[22px] italic leading-relaxed text-[#5d95bc]">
                 Please verify your details before confirming your purchase. Once placed, your items will be prepared for immediate dispatch.
               </p>
             </div>
 
             <div className="mb-6 flex items-center justify-between gap-4">
-              <span className="text-xs font-bold uppercase tracking-[0.28em] text-[#4a5c72]">Items in Shipment</span>
-              <button type="button" onClick={onBackToCart} className="text-sm font-bold text-[#1a3f6f] hover:underline">Edit Cart</button>
+              <span className="text-[13px] font-black uppercase tracking-[0.08em] text-[#5c95bd]">Items in Shipment</span>
+              <button type="button" onClick={onBackToCart} className="text-[13px] font-black uppercase tracking-[0.08em] text-[#1f6dad] hover:underline">Edit Cart</button>
             </div>
+
+            {errorMessage ? (
+              <div className="mb-6 rounded-[16px] border border-red-300 bg-red-50 px-5 py-4 text-[15px] text-red-700 shadow-[0_10px_24px_rgba(220,38,38,0.08)]">
+                {errorMessage}
+              </div>
+            ) : null}
 
             <div className="space-y-5">
               {cartItems.map((item) => {
-                const product = PRODUCTS.find((entry) => entry.id === item.productId);
-                if (!product) return null;
-
                 return (
-                  <div key={item.productId} className="rounded-2xl bg-[#255a8a] p-6 text-white">
+                  <div key={item.variantId} className="rounded-[22px] bg-[linear-gradient(90deg,#0f66a6_0%,#2c73aa_100%)] p-6 text-white shadow-[0_16px_34px_rgba(62,117,162,0.22)]">
                     <div className="flex flex-col gap-5 md:flex-row">
-                      <div className="h-32 w-32 overflow-hidden rounded-xl bg-[#1f4d80] shrink-0">
-                        <img src={product.img} alt={product.name} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                      <div className="h-32 w-32 shrink-0 overflow-hidden rounded-[14px] bg-[linear-gradient(180deg,#8ec4e3_0%,#7db8dd_100%)]">
+                        {item.img ? (
+                          <img src={item.img} alt={item.productName} className="h-full w-full object-contain p-3" referrerPolicy="no-referrer" />
+                        ) : null}
                       </div>
                       <div className="flex-1">
                         <div className="flex flex-col gap-3 md:flex-row md:justify-between">
                           <div>
-                            <h2 className="text-2xl font-bold tracking-tight text-white">{product.name}</h2>
-                            <p className="mt-1 text-base text-blue-100/70">{item.variant}</p>
+                            <h2 className="text-[32px] font-black tracking-[-0.04em] text-white">{item.productName}</h2>
+                            <p className="mt-1 text-[18px] italic text-white/80">{item.variantName}</p>
                           </div>
                           <div className="text-right">
-                            <div className="text-2xl font-black text-white">{formatCurrency(product.price * item.quantity)}</div>
-                            <div className="mt-1 text-sm text-blue-100/70">Qty:{item.quantity}</div>
+                            <div className="text-[32px] font-black tracking-[-0.04em] text-white">{formatCurrency(item.price * item.quantity)}</div>
+                            <div className="mt-1 text-[16px] italic text-white/80">Qty:{item.quantity}</div>
                           </div>
                         </div>
                         <div className="mt-5 flex flex-wrap gap-2">
-                          <span className="rounded-md bg-white/20 px-3 py-1.5 text-xs font-bold uppercase tracking-[0.14em] text-white">In Stock</span>
-                          <span className="rounded-md bg-white/20 px-3 py-1.5 text-xs font-bold uppercase tracking-[0.14em] text-white">
+                          <span className="rounded-[10px] bg-white/18 px-4 py-2 text-[12px] font-black text-white">In Stock</span>
+                          <span className="rounded-[10px] bg-white/18 px-4 py-2 text-[12px] font-black text-white">
                             {shippingMethod === 'priority' ? 'Expedited Shipping' : 'Ships Next Day'}
                           </span>
                         </div>
@@ -1945,77 +2100,79 @@ function ReviewView({
             </div>
 
             <div className="mt-10 grid grid-cols-1 gap-6 lg:grid-cols-2">
-              <div className="rounded-2xl bg-[#255a8a] p-7">
+              <div className="rounded-[18px] bg-[linear-gradient(90deg,#bfdcf0_0%,#d1e7f5_100%)] p-7 shadow-[0_16px_30px_rgba(107,154,187,0.12)]">
                 <div className="mb-6 flex items-center justify-between">
-                  <span className="text-xs font-bold uppercase tracking-[0.28em] text-blue-100/70">Shipping Address</span>
-                  <button type="button" onClick={onBackToShipping} className="text-sm font-bold text-white hover:underline">Edit</button>
+                  <span className="text-[13px] font-black uppercase tracking-[0.08em] text-[#5c95bd]">Shipping Address</span>
+                  <button type="button" onClick={onBackToShipping} className="text-[13px] font-black text-[#1f6dad] hover:underline">Edit</button>
                 </div>
                 <div className="space-y-1">
-                  <p className="font-bold text-lg text-white">{shippingName || 'Shipping contact not set'}</p>
-                  <p className="text-blue-100/80">{checkoutShippingAddress?.street || 'Street address not set'}</p>
-                  <p className="text-blue-100/80">
+                  <p className="text-[22px] font-black text-white">{shippingName || 'Shipping contact not set'}</p>
+                  <p className="text-[18px] text-white/90">{checkoutShippingAddress?.street || 'Street address not set'}</p>
+                  <p className="text-[18px] text-white/90">
                     {[checkoutShippingAddress?.city, checkoutShippingAddress?.state, checkoutShippingAddress?.postalCode].filter(Boolean).join(', ') || 'City / region not set'}
                   </p>
-                  <p className="text-blue-100/80">{checkoutShippingAddress?.country || 'Country not set'}</p>
+                  <p className="text-[18px] text-white/90">{checkoutShippingAddress?.country || 'Country not set'}</p>
                 </div>
-                <div className="mt-6 border-t border-white/20 pt-5">
-                  <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-blue-100/70">
-                    <Truck size={14} />
+                <div className="mt-6 border-t border-[#7eb7db] pt-5">
+                  <div className="inline-flex items-center gap-3 text-[14px] font-black uppercase tracking-[0.08em] text-[#1f6dad]">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-[10px] bg-white text-[#1f6dad] shadow-[0_10px_20px_rgba(107,154,187,0.12)]">
+                      <Truck size={18} />
+                    </div>
                     {shippingLabel}
                   </div>
                 </div>
               </div>
 
-              <div className="rounded-2xl bg-[#255a8a] p-7">
+              <div className="rounded-[18px] bg-[linear-gradient(90deg,#bfdcf0_0%,#d1e7f5_100%)] p-7 shadow-[0_16px_30px_rgba(107,154,187,0.12)]">
                 <div className="mb-6 flex items-center justify-between">
-                  <span className="text-xs font-bold uppercase tracking-[0.28em] text-blue-100/70">Payment Method</span>
-                  <button type="button" onClick={onBackToPayment} className="text-sm font-bold text-white hover:underline">Edit</button>
+                  <span className="text-[13px] font-black uppercase tracking-[0.08em] text-[#5c95bd]">Payment Method</span>
+                  <button type="button" onClick={onBackToPayment} className="text-[13px] font-black text-[#1f6dad] hover:underline">Edit</button>
                 </div>
                 <div className="flex items-center gap-4">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/20 text-white">
-                    <CreditCard size={20} />
+                  <div className="flex h-12 w-12 items-center justify-center rounded-[10px] bg-white text-[#1f6dad] shadow-[0_10px_20px_rgba(107,154,187,0.12)]">
+                    <CreditCard size={22} />
                   </div>
                   <div>
-                    <div className="font-bold text-white">Visa ending in 8842</div>
-                    <div className="text-sm text-blue-100/70">Expires 12/26</div>
+                    <div className="text-[22px] font-black text-white">Visa ending in 8842</div>
+                    <div className="text-[18px] text-white/90">Expires 12/26</div>
                   </div>
                 </div>
-                <div className="mt-6 border-t border-white/20 pt-5">
-                  <div className="text-xs font-bold uppercase tracking-[0.16em] text-blue-100/70">Billing Address</div>
-                  <div className="mt-1 text-sm text-blue-100/80">Same as shipping adress</div>
+                <div className="mt-6 border-t border-[#7eb7db] pt-5">
+                  <div className="text-[13px] font-black uppercase tracking-[0.08em] text-[#5c95bd]">Billing Address</div>
+                  <div className="mt-1 text-[16px] font-black text-[#1f6dad]">Same as shipping adress</div>
                 </div>
               </div>
             </div>
           </section>
 
-          <aside className="rounded-2xl border-4 border-[#1a3f6f] bg-white p-7 shadow-[0_4px_20px_rgba(26,63,111,0.08)] h-fit">
-            <h2 className="mb-8 text-2xl font-bold tracking-tight text-[#1a3f6f]">Order Summary</h2>
+          <aside className="h-fit rounded-[22px] border-[5px] border-[#7eb7db] bg-[rgba(255,250,241,0.92)] p-7 shadow-[0_16px_34px_rgba(107,154,187,0.16)]">
+            <h2 className="mb-8 text-[56px] font-black tracking-[-0.06em] text-[#1f6dad]">Order Summary</h2>
             <div className="space-y-4 text-sm">
-              <div className="flex items-center justify-between"><span className="text-xs font-bold uppercase tracking-[0.2em] text-[#6b7c8d]">Subtotal</span><span className="font-semibold text-[#1a3f6f]">{formatCurrency(subtotal)}</span></div>
-              <div className="flex items-center justify-between"><span className="text-xs font-bold uppercase tracking-[0.2em] text-[#6b7c8d]">Shipping</span><span className="font-semibold text-[#1a3f6f]">{formatCurrency(shippingCost)}</span></div>
-              <div className="flex items-center justify-between"><span className="text-xs font-bold uppercase tracking-[0.2em] text-[#6b7c8d]">Estimated Tax</span><span className="font-semibold text-[#1a3f6f]">{formatCurrency(tax)}</span></div>
+              <div className="flex items-center justify-between"><span className="text-[14px] font-black uppercase tracking-[0.08em] text-[#5c95bd]">Subtotal</span><span className="font-black text-[#1f6dad]">{formatCurrency(subtotal)}</span></div>
+              <div className="flex items-center justify-between"><span className="text-[14px] font-black uppercase tracking-[0.08em] text-[#5c95bd]">Shipping</span><span className="font-black text-[#1f6dad]">{formatCurrency(shippingCost)}</span></div>
+              <div className="flex items-center justify-between"><span className="text-[14px] font-black uppercase tracking-[0.08em] text-[#5c95bd]">Estimated Tax</span><span className="font-black text-[#1f6dad]">{formatCurrency(tax)}</span></div>
             </div>
-            <div className="my-6 border-t border-[#1a3f6f]/20"></div>
+            <div className="my-6 border-t border-[#7eb7db]"></div>
             <div className="flex items-center justify-between gap-4">
-              <span className="text-lg font-bold uppercase tracking-[0.12em] text-[#1a3f6f]">Total</span>
-              <span className="text-4xl font-black tracking-tight text-[#1a3f6f]">{formatCurrency(total)}</span>
+              <span className="text-[20px] font-black uppercase tracking-[0.06em] text-[#5c95bd]">Total</span>
+              <span className="text-[64px] font-black tracking-[-0.08em] leading-none text-[#1f6dad]">{formatCurrency(total)}</span>
             </div>
             <button
               type="button"
               onClick={onPlaceOrder}
-              className="mt-8 w-full rounded-xl bg-[#1a3f6f] px-8 py-4 text-sm font-bold uppercase tracking-[0.12em] text-white shadow-[0_4px_16px_rgba(26,63,111,0.3)] transition-all hover:bg-[#15345c] hover:shadow-[0_6px_20px_rgba(26,63,111,0.4)]"
+              className="mt-8 w-full rounded-[16px] bg-[linear-gradient(90deg,#0f5ca0_0%,#1d6ea9_100%)] px-8 py-5 text-[20px] font-black uppercase tracking-[0.06em] text-white shadow-[0_16px_30px_rgba(13,77,138,0.24)] transition-all hover:scale-[1.01]"
             >
               Place Your Order
             </button>
-            <p className="mt-5 text-xs leading-relaxed text-[#6b7c8d]">
+            <p className="mt-5 text-[16px] italic leading-relaxed text-[#5d95bc]">
               By clicking "Place Your Order", you agree to Havtel's Termes of Service and Privacy Policy.
             </p>
-            <div className="mt-5 rounded-xl bg-[#255a8a] p-5">
+            <div className="mt-5 rounded-[16px] bg-[linear-gradient(90deg,#bfdcf0_0%,#d1e7f5_100%)] p-5">
               <div className="flex items-start gap-3">
-                <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/20 text-white">
+                <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-white text-[#1f6dad] shadow-[0_10px_20px_rgba(107,154,187,0.12)]">
                   <ShieldCheck size={16} />
                 </div>
-                <p className="text-xs leading-relaxed text-blue-100/80">
+                <p className="text-[15px] leading-relaxed text-white">
                   Secure checkout with AES-256 encryption. Your payment information is never stored on our servers.
                 </p>
               </div>
@@ -2024,10 +2181,10 @@ function ReviewView({
         </div>
       </main>
 
-      <footer className="bg-[#1a3f6f] px-8 py-8 md:px-16">
+      <footer className="bg-[#1a3f6f] px-8 py-10 md:px-16">
         <div className="mx-auto flex max-w-[1600px] flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div className="text-xs font-bold uppercase tracking-[0.2em] text-white/50">© 2026 HAVTEL CORP. ALL RIGHTS RESERVED.</div>
-          <div className="flex flex-wrap gap-6 text-xs font-bold uppercase tracking-[0.2em] text-white/50">
+          <div className="text-xs font-bold uppercase tracking-[0.16em] text-white/50">© 2026 HAVTEL CORP. All Rights Reserved</div>
+          <div className="flex flex-wrap gap-6 text-xs font-bold uppercase tracking-[0.16em] text-white/50">
             <span>Privacy Policy</span>
             <span>Terms of Service</span>
             <span>Help Center</span>
@@ -2077,21 +2234,11 @@ function OrderConfirmedView({
       exit={{ opacity: 0 }}
       className="min-h-screen bg-[radial-gradient(circle_at_bottom_right,rgba(24,98,126,0.22),transparent_28%),#0f141b] text-slate-100"
     >
-      <header className="border-b border-white/5 bg-[#10151d]/90 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-[1600px] items-center justify-between px-8 py-7 md:px-16">
-          <button type="button" onClick={onGoHome} className="text-2xl font-black tracking-tighter text-[#b5cbff]">Havtel</button>
-          <nav className="hidden md:flex items-center gap-10 text-sm">
-            {['Cart', 'Shipping', 'Payment', 'Review'].map((step, index) => (
-              <div key={step} className={`border-b-2 pb-2 ${index === 3 ? 'border-[#aac7ff] text-[#d6e4ff]' : 'border-transparent text-slate-300'}`}>
-                {step}
-              </div>
-            ))}
-          </nav>
-          <button type="button" onClick={onClose} className="rounded-full p-2 text-[#b5cbff] transition-colors hover:bg-white/5 hover:text-white">
-            <X size={28} />
-          </button>
-        </div>
-      </header>
+      <CheckoutHeader
+        activeStep="review"
+        onGoHome={onGoHome}
+        onClose={onClose}
+      />
 
       <main className="mx-auto max-w-[1600px] px-8 py-14 md:px-16">
         <div className="grid grid-cols-1 gap-10 xl:grid-cols-[minmax(0,1fr)_580px]">
@@ -2297,17 +2444,12 @@ function TrackOrderView({
       exit={{ opacity: 0 }}
       className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(24,98,126,0.14),transparent_25%),#0f141b] text-slate-100"
     >
-      <header className="border-b border-white/5 bg-[#10151d]/90 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-[1600px] items-center justify-between px-8 py-7 md:px-16">
-          <button type="button" onClick={onGoHome} className="text-2xl font-black tracking-tighter text-[#b5cbff]">Havtel</button>
-          <div className="hidden md:flex items-center gap-10 text-sm text-slate-300">
-            <span className="border-b-2 border-[#aac7ff] pb-2 text-[#d6e4ff]">Tracking</span>
-          </div>
-          <button type="button" onClick={onClose} className="rounded-full p-2 text-[#b5cbff] transition-colors hover:bg-white/5 hover:text-white">
-            <X size={28} />
-          </button>
-        </div>
-      </header>
+      <CheckoutHeader
+        activeStep="tracking"
+        mode="tracking"
+        onGoHome={onGoHome}
+        onClose={onClose}
+      />
 
       <main className="mx-auto max-w-[1600px] px-8 py-14 md:px-16">
         <div className="grid grid-cols-1 gap-10 xl:grid-cols-[minmax(0,1fr)_420px]">
@@ -2513,6 +2655,8 @@ function ProductDetailView({
     ? formatCurrency(parseFloat(selectedVariant.price))
     : 'N/A';
   const productName = apiProduct?.name ?? 'Product';
+  const inStock = (selectedVariant?.inventory?.qty_available ?? 0) > 0;
+  const selectedVariantLabel = selectedVariant?.name ?? 'Standard Configuration';
   const productDescription =
     apiProduct?.description ??
     `Engineered for the next generation of computational dominance. The ${productName} leverages Havtel's proprietary photonic-bridge architecture to deliver unprecedented throughput.`;
@@ -2520,8 +2664,8 @@ function ProductDetailView({
 
   if (!apiProduct) {
     return (
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="pt-20 min-h-screen flex items-center justify-center bg-[#0f141b]">
-        <div className="text-slate-400 text-lg">Loading product…</div>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="pt-20 min-h-screen flex items-center justify-center bg-[linear-gradient(90deg,#ffffff_0%,#fbf7f4_72%,#fff6df_100%)]">
+        <div className="text-[#5d95bc] text-lg">Loading product…</div>
       </motion.div>
     );
   }
@@ -2540,143 +2684,154 @@ function ProductDetailView({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="pt-20 min-h-screen bg-[#0f141b]"
+      className="min-h-screen bg-[linear-gradient(90deg,#ffffff_0%,#fbf7f4_72%,#fff6df_100%)] pt-20"
     >
-      <section className="px-6 py-10 md:px-12 xl:px-20">
-        <div className="mb-8 flex items-center justify-between gap-4">
-          <div>
-            <span className="text-xs font-bold uppercase tracking-[0.3em] text-[#aac7ff]">Flagship Core</span>
-            <button type="button" onClick={onBackToShop} className="ml-4 text-sm text-slate-400 hover:text-white">
+      <section className="relative overflow-hidden px-6 py-10 md:px-12 xl:px-20 xl:py-14">
+        <div className="absolute inset-0">
+          <div className="absolute left-[-8%] top-[9%] h-[420px] w-[420px] rounded-full bg-[#e4f3fb] blur-[120px]"></div>
+          <div className="absolute right-[1%] top-[6%] h-[520px] w-[520px] rounded-full bg-[#f8f1eb] blur-[140px]"></div>
+          <div className="absolute left-[22%] bottom-[18%] h-[320px] w-[320px] rounded-full bg-[#fff3db] blur-[120px]"></div>
+        </div>
+
+        <div className="relative z-10 mx-auto max-w-[1720px]">
+          <div className="mb-6 flex items-center gap-4">
+            <span className="inline-flex rounded-full border border-[#d6e4ec] bg-white px-4 py-1 text-[10px] font-black uppercase tracking-[0.24em] text-[#7aa5c2] shadow-[0_8px_18px_rgba(107,154,187,0.12)]">
+              Flagship Core
+            </span>
+            <button type="button" onClick={onBackToShop} className="text-sm font-bold text-[#5d95bc] hover:text-[#1d67a7]">
               Back to Catalog
             </button>
           </div>
-        </div>
 
-        <div className="grid grid-cols-1 gap-10 xl:grid-cols-[minmax(0,0.92fr)_560px] xl:items-start">
-          <div>
-            <div className="rounded-[30px] border border-white/5 bg-[#151b23] p-5 shadow-[0_24px_60px_rgba(0,0,0,0.24)] xl:max-w-[720px]">
-              <div className="aspect-[0.96/0.82] overflow-hidden rounded-[24px] bg-[#0a0f14]">
-                {heroImage ? (
-                  <img src={heroImage} alt={productName} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
-                ) : (
-                  <div className="flex h-full w-full items-center justify-center text-sm text-slate-500">No image available</div>
+          <div className="grid grid-cols-1 gap-10 xl:grid-cols-[minmax(0,0.96fr)_560px] xl:items-start">
+            <div>
+              <div className="rounded-[30px] border-[5px] border-[#c4dcec] bg-white p-6 shadow-[0_16px_38px_rgba(107,154,187,0.14)] xl:max-w-[760px]">
+                <div className="aspect-[0.98/0.82] overflow-hidden rounded-[22px] bg-white">
+                  {heroImage ? (
+                    <img src={heroImage} alt={productName} className="h-full w-full object-contain p-6" referrerPolicy="no-referrer" />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center text-sm text-[#7f9db5]">No image available</div>
+                  )}
+                </div>
+              </div>
+
+              {gallery.length > 1 ? (
+                <div className="mt-5 flex gap-4 overflow-x-auto pb-2">
+                  {gallery.map((image, index) => (
+                    <button
+                      key={`${image}-${index}`}
+                      type="button"
+                      onClick={() => setSelectedImage(index)}
+                      className={`h-24 min-w-24 overflow-hidden rounded-[18px] border-[3px] bg-white p-1.5 shadow-[0_10px_24px_rgba(107,154,187,0.12)] transition-all ${
+                        selectedImage === index ? 'border-[#7eb7db]' : 'border-[#d6e4ec]'
+                      }`}
+                    >
+                      <img src={image} alt={`${productName} preview ${index + 1}`} className="h-full w-full rounded-[12px] object-contain bg-white" referrerPolicy="no-referrer" />
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+
+            <div className="xl:pt-7">
+              <span className="inline-flex rounded-full border border-[#d6e4ec] bg-white px-4 py-1 text-[10px] font-black uppercase tracking-[0.24em] text-[#7aa5c2] shadow-[0_8px_18px_rgba(107,154,187,0.12)]">
+                Flagship Core
+              </span>
+              <h1 className="mt-4 text-5xl font-black uppercase tracking-[-0.08em] text-[#1f6dad] md:text-[78px] leading-[0.94]">{productName}</h1>
+              <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
+                <span className="text-[46px] font-black tracking-[-0.06em] text-[#1f6dad]">{priceString}</span>
+                <span className={`text-[14px] font-black uppercase tracking-[0.08em] ${inStock ? 'text-[#3a9a34]' : 'text-[#bb5a42]'}`}>
+                  {inStock ? 'In Stock - Limited Edition' : 'Out of Stock'}
+                </span>
+              </div>
+              <p className="mt-9 max-w-[600px] text-[21px] italic leading-[1.65] text-[#5d95bc]">
+                {productDescription}
+              </p>
+
+              <div className="mt-10">
+                <div className="mb-4 text-[12px] font-black uppercase tracking-[0.1em] text-[#5c95bd]">Select Configuration</div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  {variantOptions.map((variant) => (
+                    <button
+                      key={variant.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedVariantId(variant.id);
+                        setSelectedImage(0);
+                      }}
+                      className={`rounded-[16px] border px-5 py-4 text-left shadow-[0_10px_24px_rgba(107,154,187,0.12)] transition-all ${
+                        selectedVariant?.id === variant.id
+                          ? 'border-[#7eb7db] bg-[linear-gradient(90deg,#70b2db_0%,#7fb8dd_100%)] text-white'
+                          : 'border-[#d6e4ec] bg-[linear-gradient(90deg,#bfdcf0_0%,#d4e8f6_100%)] text-[#43779d]'
+                      }`}
+                    >
+                      <div className="text-sm font-black">{variant.name}</div>
+                      <div className={`mt-1 text-xs ${selectedVariant?.id === variant.id ? 'text-white/90' : 'text-[#5e88a7]'}`}>
+                        {formatCurrency(parseFloat(variant.price))}
+                        {(variant.inventory?.qty_available ?? 0) > 0 ? ` • ${variant.inventory?.qty_available} available` : ' • Out of stock'}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+                {variantOptions.length === 0 && (
+                  <div className="rounded-[18px] border border-[#d9c9a4] bg-[#fff7e8] px-5 py-4 text-sm text-[#9a7c3f]">
+                    This product does not have any active variants configured yet.
+                  </div>
                 )}
               </div>
-            </div>
 
-            <div className="mt-6 flex gap-4 overflow-x-auto pb-2">
-              {gallery.map((image, index) => (
+              <div className="mt-6 space-y-3">
                 <button
-                  key={`${image}-${index}`}
                   type="button"
-                  onClick={() => setSelectedImage(index)}
-                  className={`h-20 min-w-20 overflow-hidden rounded-2xl border p-1 transition-all md:h-24 md:min-w-24 ${
-                    selectedImage === index ? 'border-[#aac7ff] bg-[#182130]' : 'border-white/8 bg-[#121821]'
-                  }`}
+                  onClick={() => onAddToCart(apiProduct.slug, selectedVariant?.id)}
+                  disabled={!selectedVariant || !inStock}
+                  className="w-full rounded-[16px] bg-[linear-gradient(90deg,#0f5ca0_0%,#1d6ea9_100%)] px-8 py-5 text-lg font-black text-white shadow-[0_16px_30px_rgba(13,77,138,0.22)] disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  <img src={image} alt={`${productName} preview ${index + 1}`} className="h-full w-full rounded-xl object-cover" referrerPolicy="no-referrer" />
+                  Add to cart
                 </button>
-              ))}
+                <button type="button" className="w-full rounded-[16px] bg-[linear-gradient(90deg,#b7dcef_0%,#a7d2ea_100%)] px-8 py-5 text-lg font-black text-white shadow-[0_14px_28px_rgba(107,154,187,0.18)]">
+                  Pre-order now
+                </button>
+              </div>
+
+              <div className="mt-6 grid grid-cols-3 gap-4 text-center text-[11px] font-black uppercase tracking-[0.08em] text-[#5c95bd]">
+                <div className="rounded-[16px] border border-[#d6e4ec] bg-white px-3 py-4 shadow-[0_10px_24px_rgba(107,154,187,0.12)]">Secure Payment</div>
+                <div className="rounded-[16px] border border-[#d6e4ec] bg-white px-3 py-4 shadow-[0_10px_24px_rgba(107,154,187,0.12)]">3 Year Warranty</div>
+                <div className="rounded-[16px] border border-[#d6e4ec] bg-white px-3 py-4 shadow-[0_10px_24px_rgba(107,154,187,0.12)]">Global Priority</div>
+              </div>
             </div>
           </div>
 
-          <div>
-            <span className="inline-flex rounded-full bg-[#13273b] px-3 py-1 text-[10px] font-black uppercase tracking-[0.24em] text-[#b5cbff]">
-              Flagship Core
-            </span>
-            <h1 className="mt-4 text-5xl font-black tracking-tighter text-slate-100 md:text-6xl">{productName}</h1>
-            <div className="mt-3 flex items-center gap-3">
-              <span className="text-4xl font-black text-[#d8e7ff]">{priceString}</span>
-              <span className="text-sm uppercase tracking-[0.22em] text-emerald-300">
-                {(selectedVariant?.inventory?.qty_available ?? 0) > 0 ? 'In Stock' : 'Out of Stock'}
-              </span>
-            </div>
-            <p className="mt-8 max-w-xl text-lg leading-relaxed text-slate-400">
-              {productDescription}
-            </p>
-
-            <div className="mt-10">
-              <div className="mb-4 text-xs font-bold uppercase tracking-[0.28em] text-slate-300">Select Configuration</div>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                {variantOptions.map((variant) => (
-                  <button
-                    key={variant.id}
-                    type="button"
-                    onClick={() => {
-                      setSelectedVariantId(variant.id);
-                      setSelectedImage(0);
-                    }}
-                    className={`rounded-2xl border px-5 py-4 text-left transition-all ${
-                      selectedVariant?.id === variant.id ? 'border-[#aac7ff] bg-[#172131]' : 'border-white/8 bg-[#141a22]'
-                    }`}
-                  >
-                    <div className="text-sm font-bold text-slate-100">{variant.name}</div>
-                    <div className="mt-1 text-xs text-slate-400">
-                      {formatCurrency(parseFloat(variant.price))}
-                      {(variant.inventory?.qty_available ?? 0) > 0 ? ` • ${variant.inventory?.qty_available} available` : ' • Out of stock'}
-                    </div>
-                  </button>
-                ))}
-              </div>
-              {variantOptions.length === 0 && (
-                <div className="rounded-2xl border border-amber-400/20 bg-amber-400/5 px-5 py-4 text-sm text-amber-200">
-                  This product does not have any active variants configured yet.
+          <div className="mt-8 rounded-[20px] bg-[linear-gradient(90deg,#a9cee5_0%,#b8d7ea_100%)] px-4 py-4 shadow-[0_16px_32px_rgba(107,154,187,0.16)] md:px-6">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div className="flex items-center gap-4">
+                <div className="h-14 w-14 overflow-hidden rounded-[12px] border border-white/60 bg-white p-1 shadow-[0_8px_18px_rgba(107,154,187,0.16)]">
+                  {heroImage ? <img src={heroImage} alt={productName} className="h-full w-full object-contain" referrerPolicy="no-referrer" /> : null}
                 </div>
-              )}
-            </div>
-
-            <div className="mt-8 space-y-3">
-              <button
-                type="button"
-                onClick={() => onAddToCart(apiProduct.slug, selectedVariant?.id)}
-                disabled={!selectedVariant || (selectedVariant.inventory?.qty_available ?? 0) <= 0}
-                className="w-full rounded-[18px] bg-gradient-to-r from-[#a9c7ff] to-[#4d93f7] px-8 py-5 text-lg font-bold text-[#03192f] shadow-[0_20px_50px_rgba(77,147,247,0.28)] disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Add to Cart
-              </button>
-              <button type="button" className="w-full rounded-[18px] border border-white/10 px-8 py-5 text-lg font-bold text-slate-200 transition-colors hover:bg-white/5">
-                Pre-order Now
-              </button>
-            </div>
-
-            <div className="mt-8 grid grid-cols-3 gap-4 text-center text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
-              <div className="rounded-2xl border border-white/5 bg-[#141a22] px-3 py-4">Secure Payment</div>
-              <div className="rounded-2xl border border-white/5 bg-[#141a22] px-3 py-4">3 Year Warranty</div>
-              <div className="rounded-2xl border border-white/5 bg-[#141a22] px-3 py-4">Global Priority</div>
+                <div>
+                  <div className="text-sm font-black text-white">{productName}</div>
+                  <div className="text-[11px] uppercase tracking-[0.08em] text-white/90">{selectedVariantLabel}</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-5">
+                <div className="text-right">
+                  <div className="text-[10px] font-black uppercase tracking-[0.18em] text-white/85">Subtotal</div>
+                  <div className="text-[34px] font-black tracking-[-0.05em] text-white">{priceString}</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onAddToCart(apiProduct.slug, selectedVariant?.id)}
+                  disabled={!selectedVariant || !inStock}
+                  className="rounded-[14px] bg-[linear-gradient(90deg,#0f5ca0_0%,#1d6ea9_100%)] px-8 py-4 text-base font-black text-white shadow-[0_14px_28px_rgba(13,77,138,0.22)] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Add to cart
+                </button>
+              </div>
             </div>
           </div>
-        </div>
 
-        <div className="sticky bottom-6 z-30 mt-6 rounded-[24px] border border-white/8 bg-[#151b23]/95 px-5 py-4 shadow-[0_24px_60px_rgba(0,0,0,0.35)] backdrop-blur-xl md:px-8">
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div className="flex items-center gap-4">
-              <div className="h-14 w-14 overflow-hidden rounded-xl bg-[#0b1016]">
-                {heroImage ? <img src={heroImage} alt={productName} className="h-full w-full object-cover" referrerPolicy="no-referrer" /> : null}
-              </div>
-              <div>
-                <div className="text-sm font-bold text-slate-100">{productName}</div>
-                <div className="text-xs uppercase tracking-[0.2em] text-slate-400">{selectedVariant?.name ?? 'No configuration'} </div>
-              </div>
-            </div>
-            <div className="flex items-center gap-6">
-              <div className="text-right">
-                <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Subtotal</div>
-                <div className="text-2xl font-black text-[#d8e7ff]">{priceString}</div>
-              </div>
-              <button
-                type="button"
-                onClick={() => onAddToCart(apiProduct.slug, selectedVariant?.id)}
-                disabled={!selectedVariant || (selectedVariant.inventory?.qty_available ?? 0) <= 0}
-                className="rounded-2xl bg-gradient-to-r from-[#a9c7ff] to-[#4d93f7] px-8 py-4 text-base font-bold text-[#03192f] disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Add to Cart
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-12 border-b border-white/8">
-          <div className="flex gap-8 overflow-x-auto">
+          <div className="mt-14 border-b border-[#b9d4e7]">
+            <div className="flex gap-8 overflow-x-auto">
             {[
               ['description', 'Description'],
               ['specs', 'Technical Specifications'],
@@ -2686,132 +2841,143 @@ function ProductDetailView({
                 key={id}
                 type="button"
                 onClick={() => setSelectedTab(id as 'description' | 'specs' | 'reviews')}
-                className={`border-b-2 px-1 py-4 text-sm font-bold ${selectedTab === id ? 'border-[#aac7ff] text-[#d8e7ff]' : 'border-transparent text-slate-400'}`}
+                className={`border-b-[3px] px-1 py-4 text-sm font-black ${
+                  selectedTab === id ? 'border-[#76b7db] text-[#1f6dad]' : 'border-transparent text-[#7ca0b8]'
+                }`}
               >
                 {label}
               </button>
             ))}
-          </div>
-        </div>
-
-        <div className="mt-10 grid grid-cols-1 gap-10 xl:grid-cols-[minmax(0,1fr)_420px]">
-          <div>
-            {selectedTab === 'description' && (
-              <>
-                <h2 className="text-4xl font-black tracking-tight text-slate-100">The Future of Compute</h2>
-                <p className="mt-6 max-w-4xl text-lg leading-relaxed text-slate-400">
-                  The Havtel Quantum X-8000 isn't just a processor; it's a paradigm shift. Utilizing the Lumina v4 microarchitecture, we've optimized every nanometer to ensure that bottlenecking is a relic of the past. Whether you're compiling massive codebases, rendering 8K cinema-grade visuals, or training deep neural networks, the X-8000 adapts in real-time.
-                </p>
-                <blockquote className="mt-8 max-w-2xl rounded-[24px] border border-white/5 bg-[#161c24] px-6 py-5 text-base italic leading-relaxed text-slate-300">
-                  "The benchmark results for the X-8000 defy current expectations of a co-equal silicon. It's in a league of its own."
-                  <div className="mt-3 text-xs not-italic font-bold uppercase tracking-[0.2em] text-slate-500">Technexus Review Lab</div>
-                </blockquote>
-              </>
-            )}
-
-            {selectedTab === 'specs' && (
-              <>
-                <h2 className="text-4xl font-black tracking-tight text-slate-100">Technical Specifications</h2>
-                <div className="mt-8 grid grid-cols-1 gap-y-5 sm:grid-cols-2">
-                  {specifications.map(([label, value]) => (
-                    <div key={label} className="flex items-center justify-between gap-6 border-b border-white/5 py-4 sm:pr-8">
-                      <span className="text-sm text-slate-400">{label}</span>
-                      <span className="text-sm font-bold text-slate-100">{value}</span>
-                    </div>
-                  ))}
-                </div>
-              </>
-            )}
-
-            {selectedTab === 'reviews' && (
-              <>
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <h2 className="text-4xl font-black tracking-tight text-slate-100">User Feedback</h2>
-                    <div className="mt-3 flex items-center gap-3 text-slate-300">
-                      <div className="flex gap-1 text-[#aac7ff]">{Array.from({ length: 5 }).map((_, i) => <Star key={i} size={16} fill="currentColor" />)}</div>
-                      <span className="text-sm">4.9/5 (Based on 142 reviews)</span>
-                    </div>
-                  </div>
-                  <button type="button" className="rounded-2xl border border-white/10 px-5 py-3 text-sm font-bold text-slate-200 transition-colors hover:bg-white/5">
-                    Write a Review
-                  </button>
-                </div>
-                <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-3">
-                  {[
-                    ['Marcus Jensen', 'Lead 3D Artist', 'The transition from my previous gen to the Quantum X-8000 was night and day. Render times in Blender dropped by nearly 45%.'],
-                    ['Sarah Lin', 'Systems Engineer', 'Installation was a breeze. The thermals are incredibly stable even under 100% load during long simulation runs.'],
-                    ['David Byrne', 'Game Developer', 'High price tag, but you absolutely get what you pay for. The multi-threaded performance is unmatched in the consumer space.'],
-                  ].map(([name, role, review]) => (
-                    <div key={name} className="rounded-[24px] border border-white/5 bg-[#161c24] p-6">
-                      <div className="mb-4 flex items-center justify-between">
-                        <div className="flex gap-1 text-[#aac7ff]">{Array.from({ length: 5 }).map((_, i) => <Star key={i} size={14} fill="currentColor" />)}</div>
-                        <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Verified</span>
-                      </div>
-                      <p className="text-sm leading-relaxed text-slate-300">"{review}"</p>
-                      <div className="mt-5">
-                        <div className="text-sm font-bold text-slate-100">{name}</div>
-                        <div className="text-xs text-slate-500">{role}</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
-
-          <div className="space-y-5">
-            {selectedTab !== 'reviews' &&
-              specifications.map(([label, value]) => (
-                <div key={label} className="flex items-center justify-between gap-6 border-b border-white/5 py-3">
-                  <span className="text-sm text-slate-400">{label}</span>
-                  <span className="text-sm font-bold text-slate-100">{value}</span>
-                </div>
-              ))}
-          </div>
-        </div>
-
-        <section className="mt-16 overflow-hidden rounded-[34px] border border-white/5 bg-[radial-gradient(circle_at_top_right,rgba(55,116,173,0.18),transparent_30%),#151b23]">
-          <div className="grid grid-cols-1 gap-10 px-8 py-10 md:grid-cols-[0.85fr_1.15fr] md:px-10">
-            <div>
-              <span className="text-xs font-bold uppercase tracking-[0.32em] text-[#aac7ff]">Innovative Cooling</span>
-              <h2 className="mt-5 text-5xl font-black tracking-tighter text-slate-100">AI-Driven Thermal Management</h2>
-              <p className="mt-6 text-lg leading-relaxed text-slate-400">
-                The X-8000 monitors its own thermal signatures at 10,000 intervals per second. Our neural-mesh adjusts power delivery dynamically, ensuring you hit peak performance without the thermal throttle common in standard high-performance chips.
-              </p>
-              <button type="button" className="mt-8 inline-flex items-center gap-3 text-sm font-bold text-[#b9d1ff]">
-                Learn about Havtel Mesh Technology <ArrowRight size={16} />
-              </button>
             </div>
-            <div className="min-h-[320px] rounded-[28px] bg-[radial-gradient(circle_at_center,rgba(77,147,247,0.22),transparent_30%),linear-gradient(135deg,#10161f,#0b1016)]"></div>
           </div>
-        </section>
 
-        <section className="mt-20">
-          <div className="mb-8 flex items-center justify-between">
-            <h2 className="text-4xl font-black tracking-tight text-slate-100">Complete Your Build</h2>
+          <div className="mt-10 grid grid-cols-1 gap-10 xl:grid-cols-[minmax(0,1fr)_420px]">
+            <div>
+              {selectedTab === 'description' && (
+                <>
+                  <h2 className="text-4xl font-black tracking-[-0.06em] text-[#1f6dad] md:text-[58px]">The Future of Compute</h2>
+                  <p className="mt-6 max-w-4xl text-[20px] italic leading-[1.7] text-[#5d95bc]">
+                    The Havtel {productName} isn&apos;t just a processor; it is a paradigm shift. Utilizing the Lumina v4 microarchitecture, we have optimized every nanometer to ensure that bottlenecking is a relic of the past. Whether you are compiling massive codebases, rendering 8K cinema-grade visuals, or training deep neural networks, the {productName} adapts in real time.
+                  </p>
+                  <blockquote className="mt-8 max-w-2xl rounded-[18px] bg-[linear-gradient(90deg,#b4d7eb_0%,#c2deef_100%)] px-6 py-6 text-[18px] italic leading-[1.65] text-white shadow-[0_14px_30px_rgba(107,154,187,0.18)]">
+                    &quot;The benchmark results for the {productName} defy current expectations of a co-equal silicon. It&apos;s in a league of its own.&quot;
+                    <div className="mt-4 text-[11px] not-italic font-black uppercase tracking-[0.16em] text-white/90">Technexus Review Lab</div>
+                  </blockquote>
+                </>
+              )}
+
+              {selectedTab === 'specs' && (
+                <>
+                  <h2 className="text-4xl font-black tracking-[-0.06em] text-[#1f6dad] md:text-[58px]">Technical Specifications</h2>
+                  <div className="mt-8 grid grid-cols-1 gap-y-4 sm:grid-cols-2">
+                    {specifications.map(([label, value]) => (
+                      <div key={label} className="flex items-center justify-between gap-6 border-b border-[#b9d4e7] py-4 sm:pr-8">
+                        <span className="text-sm font-black uppercase tracking-[0.08em] text-[#5d95bc]">{label}</span>
+                        <span className="text-sm font-black text-[#1f6dad]">{value}</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {selectedTab === 'reviews' && (
+                <>
+                  <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+                    <div>
+                      <h2 className="text-4xl font-black tracking-[-0.06em] text-[#1f6dad] md:text-[58px]">User Feedback</h2>
+                      <div className="mt-3 flex items-center gap-3 text-[#5d95bc]">
+                        <div className="flex gap-1 text-[#76b7db]">{Array.from({ length: 5 }).map((_, i) => <Star key={i} size={16} fill="currentColor" />)}</div>
+                        <span className="text-sm font-bold">4.9/5 (Based on 142 reviews)</span>
+                      </div>
+                    </div>
+                    <button type="button" className="rounded-[14px] border border-[#d6e4ec] bg-white px-5 py-3 text-sm font-black text-[#1f6dad] shadow-[0_10px_24px_rgba(107,154,187,0.12)] transition-colors hover:bg-[#f3f9fd]">
+                      Write a Review
+                    </button>
+                  </div>
+                  <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-3">
+                    {[
+                      ['Marcus Jensen', 'Lead 3D Artist', 'The transition from my previous gen to the Quantum X-8000 was night and day. Render times in Blender dropped by nearly 45%.'],
+                      ['Sarah Lin', 'Systems Engineer', 'Installation was a breeze. The thermals are incredibly stable even under 100% load during long simulation runs.'],
+                      ['David Byrne', 'Game Developer', 'High price tag, but you absolutely get what you pay for. The multi-threaded performance is unmatched in the consumer space.'],
+                    ].map(([name, role, review]) => (
+                      <div key={name} className="rounded-[22px] border border-[#d6e4ec] bg-white p-6 shadow-[0_12px_28px_rgba(107,154,187,0.12)]">
+                        <div className="mb-4 flex items-center justify-between">
+                          <div className="flex gap-1 text-[#76b7db]">{Array.from({ length: 5 }).map((_, i) => <Star key={i} size={14} fill="currentColor" />)}</div>
+                          <span className="text-[10px] font-black uppercase tracking-[0.18em] text-[#7ca0b8]">Verified</span>
+                        </div>
+                        <p className="text-sm leading-relaxed text-[#5d95bc]">&quot;{review}&quot;</p>
+                        <div className="mt-5">
+                          <div className="text-sm font-black text-[#1f6dad]">{name}</div>
+                          <div className="text-xs text-[#7ca0b8]">{role}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="space-y-5">
+              {selectedTab !== 'reviews' &&
+                specifications.map(([label, value]) => (
+                  <div key={label} className="flex items-center justify-between gap-6 border-b border-[#b9d4e7] py-3">
+                    <span className="text-sm font-black uppercase tracking-[0.08em] text-[#5d95bc]">{label}</span>
+                    <span className="text-sm font-black text-[#1f6dad]">{value}</span>
+                  </div>
+                ))}
+            </div>
           </div>
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
-            {relatedProducts.map((related) => (
-              <button
-                key={related.id}
-                type="button"
-                onClick={() => onProductSelect(related.id)}
-                className="rounded-[24px] border border-white/5 bg-[#161c24] p-5 text-left transition-all hover:border-[#aac7ff]/30"
-              >
-                <div className="aspect-square overflow-hidden rounded-2xl bg-[#0b1016]">
-                  <img src={related.img} alt={related.name} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+
+          <section className="mt-16 overflow-hidden rounded-[28px] bg-[linear-gradient(90deg,#d7ebf5_0%,#d2e6f2_100%)] p-6 shadow-[0_16px_32px_rgba(107,154,187,0.12)] md:p-8">
+            <div className="grid grid-cols-1 gap-8 md:grid-cols-[0.88fr_1.12fr] md:items-center">
+              <div>
+                <span className="text-[11px] font-black uppercase tracking-[0.12em] text-[#67a0c4]">Innovative Cooling</span>
+                <h2 className="mt-5 text-4xl font-black tracking-[-0.06em] text-[#1f6dad] md:text-[56px]">AI-Driven Thermal Management</h2>
+                <p className="mt-5 max-w-3xl text-[19px] italic leading-[1.7] text-[#5d95bc]">
+                  The {productName} monitors its own thermal signatures at 10,000 intervals per second. Our neural-mesh adjusts power delivery dynamically, ensuring you hit peak performance without the thermal throttle common in standard high-performance chips.
+                </p>
+                <button type="button" className="mt-8 inline-flex items-center gap-3 text-sm font-black text-[#1f6dad]">
+                  Learn about Havtel Mesh Technology <ArrowRight size={16} />
+                </button>
+              </div>
+              <div className="relative min-h-[280px] overflow-hidden rounded-[24px] bg-[linear-gradient(180deg,#c9e2f0_0%,#c5deed_100%)]">
+                <div className="absolute left-1/2 top-1/2 h-40 w-40 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#7db8dd]/55 blur-[38px]"></div>
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.18),transparent_36%)]"></div>
+                <div className="absolute bottom-5 right-5 flex h-10 w-10 items-center justify-center rounded-full bg-white/80 text-[#1f6dad] shadow-[0_10px_20px_rgba(107,154,187,0.16)]">
+                  <ArrowRight size={18} />
                 </div>
-                <h3 className="mt-4 text-lg font-bold text-slate-100">{related.name}</h3>
-                <p className="mt-1 text-xs uppercase tracking-[0.18em] text-slate-500">{related.series}</p>
-                <div className="mt-4 flex items-center justify-between">
-                  <span className="text-lg font-black text-slate-100">{related.priceString}</span>
-                  <span className="rounded-lg bg-white/5 px-3 py-2 text-xs font-bold text-[#aac7ff]">View</span>
-                </div>
-              </button>
-            ))}
-          </div>
-        </section>
+              </div>
+            </div>
+          </section>
+
+          <section className="mt-20">
+            <div className="mb-8 flex items-center justify-between">
+              <h2 className="text-4xl font-black tracking-[-0.06em] text-[#1f6dad] md:text-[56px]">Complete Your Build</h2>
+            </div>
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
+              {relatedProducts.map((related) => (
+                <button
+                  key={related.id}
+                  type="button"
+                  onClick={() => onProductSelect(related.slug)}
+                  className="rounded-[18px] border border-[#7eb7db] bg-[linear-gradient(180deg,#ffffff_0%,#ffffff_63%,#71b2db_63%,#75b3db_100%)] p-4 text-left shadow-[0_16px_30px_rgba(107,154,187,0.16)] transition-all hover:-translate-y-1 hover:shadow-[0_20px_36px_rgba(107,154,187,0.2)]"
+                >
+                  <div className="aspect-[0.92/0.86] overflow-hidden rounded-[12px] border border-[#d6e4ec] bg-white">
+                    <img src={related.img} alt={related.name} className="h-full w-full object-contain p-3" referrerPolicy="no-referrer" />
+                  </div>
+                  <div className="mt-4">
+                    <h3 className="text-[22px] font-black tracking-[-0.04em] text-white">{related.name}</h3>
+                    <p className="mt-1 text-[12px] font-black uppercase tracking-[0.08em] text-white/85">{related.series}</p>
+                  </div>
+                  <div className="mt-4 flex items-end justify-between gap-3">
+                    <span className="text-[32px] font-black tracking-[-0.05em] text-white">{related.priceString}</span>
+                    <span className="rounded-[10px] bg-white/20 px-3 py-2 text-[10px] font-black uppercase tracking-[0.12em] text-white">View</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </section>
+        </div>
       </section>
     </motion.div>
   );
@@ -2849,10 +3015,10 @@ function NotFoundView({ onGoHome }: { onGoHome: () => void; key?: string }) {
             </button>
             <button
               type="button"
-              onClick={() => window.location.hash = ''}
+              onClick={onGoHome}
               className="rounded-[22px] border border-white/10 px-10 py-6 text-xl font-bold text-[#b9d1ff] transition-colors hover:bg-white/5"
             >
-              Clear Hash
+              Return Home
             </button>
           </div>
 
@@ -2894,49 +3060,49 @@ function AuthLoginView({
   const [password, setPassword] = useState('');
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="pt-20 min-h-screen bg-[#0f141b]">
-      <section className="relative overflow-hidden px-8 py-20 md:px-16">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="min-h-screen bg-[linear-gradient(90deg,#ffffff_0%,#fbf7f4_70%,#fff6df_100%)] pt-20">
+      <section className="relative overflow-hidden px-8 py-20 md:px-16 md:py-24">
         <div className="absolute inset-0">
-          <div className="absolute left-[-8%] top-[12%] h-[420px] w-[420px] rounded-full bg-[#aac7ff]/10 blur-[140px]"></div>
-          <div className="absolute right-[-8%] bottom-[10%] h-[360px] w-[360px] rounded-full bg-[#3e90ff]/10 blur-[120px]"></div>
+          <div className="absolute left-[-6%] top-[14%] h-[420px] w-[420px] rounded-full bg-[#e4f3fb] blur-[140px]"></div>
+          <div className="absolute right-[2%] bottom-[8%] h-[360px] w-[360px] rounded-full bg-[#fff2d8] blur-[120px]"></div>
         </div>
-        <div className="relative z-10 mx-auto grid max-w-6xl grid-cols-1 gap-10 xl:grid-cols-[0.95fr_520px]">
-          <div className="pt-8">
-            <span className="text-xs font-bold uppercase tracking-[0.34em] text-[#aac7ff]">Access Layer</span>
-            <h1 className="mt-6 text-6xl font-black tracking-tighter text-slate-100 md:text-7xl">Welcome Back</h1>
-            <p className="mt-6 max-w-2xl text-2xl leading-relaxed text-slate-400">
+        <div className="relative z-10 mx-auto grid max-w-[1240px] grid-cols-1 gap-12 xl:grid-cols-[0.92fr_580px]">
+          <div className="pt-8 md:pt-12">
+            <span className="text-[12px] font-black uppercase tracking-[0.18em] text-[#5c95bd]">Account Center</span>
+            <h1 className="mt-7 text-6xl font-black uppercase tracking-[-0.08em] text-[#1f6dad] md:text-[86px]">Welcome Back</h1>
+            <p className="mt-7 max-w-[720px] text-[24px] italic leading-[1.6] text-[#5d95bc]">
               Sign in to manage your account center, delivery contacts, order history, and saved checkout flow.
             </p>
-            <button type="button" onClick={onGoHome} className="mt-10 text-lg font-bold text-[#b9d1ff] hover:text-white">
+            <button type="button" onClick={onGoHome} className="mt-14 text-[18px] font-black text-[#1d67a7] hover:text-[#0d4d8a]">
               Return Home
             </button>
           </div>
-          <div className="rounded-[32px] border border-white/5 bg-[#1b2129] p-8 shadow-[0_30px_80px_rgba(0,0,0,0.3)] md:p-10">
-            <h2 className="text-4xl font-black tracking-tight text-slate-100">Login</h2>
+          <div className="rounded-[16px] bg-[linear-gradient(90deg,#64add9_0%,#73b4db_100%)] p-8 shadow-[0_20px_50px_rgba(95,168,215,0.24)] md:p-12">
+            <h2 className="text-[58px] font-black tracking-[-0.06em] text-white">Login</h2>
             <form
               onSubmit={async (event) => {
                 event.preventDefault();
                 await onLogin({ email, password });
               }}
-              className="mt-8 space-y-6"
+              className="mt-10 space-y-7"
             >
               <label className="block">
-                <span className="mb-4 block text-sm font-bold uppercase tracking-[0.24em] text-slate-300">Email Address</span>
-                <input type="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@domain.tech" className="w-full rounded-2xl border border-white/5 bg-[#0b1016] px-6 py-5 text-xl text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-[#aac7ff]/40" />
+                <span className="mb-4 block text-[12px] font-black uppercase tracking-[0.08em] text-white">Email Address</span>
+                <input type="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@domain.tech" className="w-full rounded-[14px] border border-[#d6e4ec] bg-[linear-gradient(180deg,#fffefb_0%,#fbfbfd_100%)] px-7 py-5 text-[18px] text-[#1f5078] shadow-[0_8px_20px_rgba(22,71,104,0.18)] outline-none placeholder:text-[#5c85a2] focus:border-[#8dbbda]" />
               </label>
               <label className="block">
-                <span className="mb-4 block text-sm font-bold uppercase tracking-[0.24em] text-slate-300">Password</span>
-                <input type="password" required value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Enter your password" className="w-full rounded-2xl border border-white/5 bg-[#0b1016] px-6 py-5 text-xl text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-[#aac7ff]/40" />
+                <span className="mb-4 block text-[12px] font-black uppercase tracking-[0.08em] text-white">Password</span>
+                <input type="password" required value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Enter your password" className="w-full rounded-[14px] border border-[#d6e4ec] bg-[linear-gradient(180deg,#fffefb_0%,#fbfbfd_100%)] px-7 py-5 text-[18px] text-[#1f5078] shadow-[0_8px_20px_rgba(22,71,104,0.18)] outline-none placeholder:text-[#5c85a2] focus:border-[#8dbbda]" />
               </label>
               {errorMessage ? (
-                <p className="rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">{errorMessage}</p>
+                <p className="rounded-[12px] border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-white">{errorMessage}</p>
               ) : null}
-              <div className="flex items-center justify-between gap-4 text-sm">
-                <button type="button" onClick={onGoToForgot} className="font-bold text-[#b9d1ff] hover:text-white">Forgot password?</button>
-                <button type="button" onClick={onGoToSignup} className="font-bold text-slate-400 hover:text-white">Create account</button>
+              <div className="flex items-center justify-between gap-4 text-[16px] font-black text-white">
+                <button type="button" onClick={onGoToForgot} className="hover:text-[#eaf6ff]">Forgot password?</button>
+                <button type="button" onClick={onGoToSignup} className="hover:text-[#eaf6ff]">Create account</button>
               </div>
-              <button type="submit" disabled={isSubmitting} className="w-full rounded-[22px] bg-gradient-to-r from-[#a9c7ff] to-[#4d93f7] px-8 py-5 text-xl font-bold text-[#03192f] shadow-[0_24px_60px_rgba(77,147,247,0.35)] disabled:cursor-not-allowed disabled:opacity-70">
-                {isSubmitting ? 'Signing In...' : 'Sign In'}
+              <button type="submit" disabled={isSubmitting} className="w-full rounded-[12px] bg-[linear-gradient(90deg,#0f5ca0_0%,#1d6ea9_100%)] px-8 py-5 text-[18px] font-black text-white shadow-[0_14px_30px_rgba(13,77,138,0.24)] disabled:cursor-not-allowed disabled:opacity-70">
+                {isSubmitting ? 'Signing In...' : 'Sing In'}
               </button>
             </form>
           </div>
@@ -2975,64 +3141,64 @@ function AuthSignupView({
   const [password, setPassword] = useState('');
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="pt-20 min-h-screen bg-[#0f141b]">
-      <section className="relative overflow-hidden px-8 py-20 md:px-16">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="min-h-screen bg-[linear-gradient(90deg,#ffffff_0%,#fbf7f4_70%,#fff6df_100%)] pt-20">
+      <section className="relative overflow-hidden px-8 py-20 md:px-16 md:py-24">
         <div className="absolute inset-0">
-          <div className="absolute left-[5%] top-[14%] h-[320px] w-[320px] rounded-full bg-[#aac7ff]/10 blur-[120px]"></div>
-          <div className="absolute right-[0%] bottom-[10%] h-[380px] w-[380px] rounded-full bg-[#3e90ff]/8 blur-[120px]"></div>
+          <div className="absolute left-[2%] top-[14%] h-[320px] w-[320px] rounded-full bg-[#e4f3fb] blur-[120px]"></div>
+          <div className="absolute right-[0%] bottom-[10%] h-[380px] w-[380px] rounded-full bg-[#fff2d8] blur-[120px]"></div>
         </div>
-        <div className="relative z-10 mx-auto grid max-w-6xl grid-cols-1 gap-10 xl:grid-cols-[0.95fr_560px]">
-          <div className="pt-8">
-            <span className="text-xs font-bold uppercase tracking-[0.34em] text-[#aac7ff]">Identity Setup</span>
-            <h1 className="mt-6 text-6xl font-black tracking-tighter text-slate-100 md:text-7xl">Create Your Account</h1>
-            <p className="mt-6 max-w-2xl text-2xl leading-relaxed text-slate-400">
+        <div className="relative z-10 mx-auto grid max-w-[1320px] grid-cols-1 gap-12 xl:grid-cols-[0.92fr_620px]">
+          <div className="pt-8 md:pt-12">
+            <span className="text-[12px] font-black uppercase tracking-[0.18em] text-[#5c95bd]">Identity Setup</span>
+            <h1 className="mt-7 text-6xl font-black uppercase tracking-[-0.08em] text-[#1f6dad] md:text-[86px]">Create Account</h1>
+            <p className="mt-7 max-w-[760px] text-[24px] italic leading-[1.6] text-[#5d95bc]">
               Join the Havtel ecosystem to save addresses, review orders, track shipments, and streamline future purchases.
             </p>
-            <button type="button" onClick={onGoHome} className="mt-10 text-lg font-bold text-[#b9d1ff] hover:text-white">
+            <button type="button" onClick={onGoHome} className="mt-14 text-[18px] font-black text-[#1d67a7] hover:text-[#0d4d8a]">
               Return Home
             </button>
           </div>
-          <div className="rounded-[32px] border border-white/5 bg-[#1b2129] p-8 shadow-[0_30px_80px_rgba(0,0,0,0.3)] md:p-10">
-            <h2 className="text-4xl font-black tracking-tight text-slate-100">Sign Up</h2>
+          <div className="rounded-[16px] bg-[linear-gradient(90deg,#64add9_0%,#73b4db_100%)] p-8 shadow-[0_20px_50px_rgba(95,168,215,0.24)] md:p-12">
+            <h2 className="text-[58px] font-black tracking-[-0.06em] text-white">Sign Up</h2>
             <form
               onSubmit={async (event) => {
                 event.preventDefault();
                 await onSignup({ accountType, firstName, lastName, companyName, email, password });
               }}
-              className="mt-8 grid grid-cols-1 gap-6"
+              className="mt-10 grid grid-cols-1 gap-6"
             >
-              <div className="grid grid-cols-1 gap-3 rounded-[24px] border border-white/5 bg-[#141a22] p-3 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-3 rounded-[16px] bg-white/10 p-3 sm:grid-cols-2">
                 <button
                   type="button"
                   onClick={() => setAccountType('b2c')}
-                  className={`rounded-2xl px-5 py-4 text-left transition-all ${
+                  className={`rounded-[12px] px-5 py-4 text-left transition-all ${
                     accountType === 'b2c'
-                      ? 'bg-gradient-to-r from-[#a9c7ff] to-[#4d93f7] text-[#03192f]'
-                      : 'bg-[#0b1016] text-slate-300 hover:bg-[#111823]'
+                      ? 'bg-[linear-gradient(180deg,#f7fbff_0%,#d7ecfa_100%)] text-[#0f5ca0]'
+                      : 'bg-white/20 text-white hover:bg-white/30'
                   }`}
                 >
-                  <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10">
+                  <div className={`mb-4 flex h-12 w-12 items-center justify-center rounded-[12px] ${accountType === 'b2c' ? 'bg-[#0f5ca0]/10' : 'bg-white/20'}`}>
                     <CircleUserRound size={22} />
                   </div>
-                  <div className="text-sm font-black uppercase tracking-[0.24em]">Personal</div>
-                  <div className={`mt-2 text-sm ${accountType === 'b2c' ? 'text-[#0a2745]' : 'text-slate-400'}`}>
+                  <div className="text-sm font-black uppercase tracking-[0.16em]">Personal</div>
+                  <div className={`mt-2 text-sm ${accountType === 'b2c' ? 'text-[#1f5078]' : 'text-white/80'}`}>
                     Create an individual account for personal purchases and saved preferences.
                   </div>
                 </button>
                 <button
                   type="button"
                   onClick={() => setAccountType('b2b')}
-                  className={`rounded-2xl px-5 py-4 text-left transition-all ${
+                  className={`rounded-[12px] px-5 py-4 text-left transition-all ${
                     accountType === 'b2b'
-                      ? 'bg-gradient-to-r from-[#a9c7ff] to-[#4d93f7] text-[#03192f]'
-                      : 'bg-[#0b1016] text-slate-300 hover:bg-[#111823]'
+                      ? 'bg-[linear-gradient(180deg,#f7fbff_0%,#d7ecfa_100%)] text-[#0f5ca0]'
+                      : 'bg-white/20 text-white hover:bg-white/30'
                   }`}
                 >
-                  <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10">
+                  <div className={`mb-4 flex h-12 w-12 items-center justify-center rounded-[12px] ${accountType === 'b2b' ? 'bg-[#0f5ca0]/10' : 'bg-white/20'}`}>
                     <Building2 size={22} />
                   </div>
-                  <div className="text-sm font-black uppercase tracking-[0.24em]">Company</div>
-                  <div className={`mt-2 text-sm ${accountType === 'b2b' ? 'text-[#0a2745]' : 'text-slate-400'}`}>
+                  <div className="text-sm font-black uppercase tracking-[0.16em]">Company</div>
+                  <div className={`mt-2 text-sm ${accountType === 'b2b' ? 'text-[#1f5078]' : 'text-white/80'}`}>
                     Create a business account for B2B orders, procurement teams, and corporate checkout flows.
                   </div>
                 </button>
@@ -3044,23 +3210,23 @@ function AuthSignupView({
                   value={companyName}
                   onChange={(event) => setCompanyName(event.target.value)}
                   placeholder="Company name"
-                  className="w-full rounded-2xl border border-white/5 bg-[#0b1016] px-6 py-5 text-xl text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-[#aac7ff]/40"
+                  className="w-full rounded-[14px] border border-[#d6e4ec] bg-[linear-gradient(180deg,#fffefb_0%,#fbfbfd_100%)] px-7 py-5 text-[18px] text-[#1f5078] shadow-[0_8px_20px_rgba(22,71,104,0.18)] outline-none placeholder:text-[#5c85a2] focus:border-[#8dbbda]"
                 />
               ) : (
                 <>
-                  <input required value={firstName} onChange={(event) => setFirstName(event.target.value)} placeholder="First name" className="w-full rounded-2xl border border-white/5 bg-[#0b1016] px-6 py-5 text-xl text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-[#aac7ff]/40" />
-                  <input required value={lastName} onChange={(event) => setLastName(event.target.value)} placeholder="Last name" className="w-full rounded-2xl border border-white/5 bg-[#0b1016] px-6 py-5 text-xl text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-[#aac7ff]/40" />
+                  <input required value={firstName} onChange={(event) => setFirstName(event.target.value)} placeholder="First name" className="w-full rounded-[14px] border border-[#d6e4ec] bg-[linear-gradient(180deg,#fffefb_0%,#fbfbfd_100%)] px-7 py-5 text-[18px] text-[#1f5078] shadow-[0_8px_20px_rgba(22,71,104,0.18)] outline-none placeholder:text-[#5c85a2] focus:border-[#8dbbda]" />
+                  <input required value={lastName} onChange={(event) => setLastName(event.target.value)} placeholder="Last name" className="w-full rounded-[14px] border border-[#d6e4ec] bg-[linear-gradient(180deg,#fffefb_0%,#fbfbfd_100%)] px-7 py-5 text-[18px] text-[#1f5078] shadow-[0_8px_20px_rgba(22,71,104,0.18)] outline-none placeholder:text-[#5c85a2] focus:border-[#8dbbda]" />
                 </>
               )}
-              <input required type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="Email address" className="w-full rounded-2xl border border-white/5 bg-[#0b1016] px-6 py-5 text-xl text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-[#aac7ff]/40" />
-              <input required type="password" minLength={8} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Create password" className="w-full rounded-2xl border border-white/5 bg-[#0b1016] px-6 py-5 text-xl text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-[#aac7ff]/40" />
+              <input required type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="Email address" className="w-full rounded-[14px] border border-[#d6e4ec] bg-[linear-gradient(180deg,#fffefb_0%,#fbfbfd_100%)] px-7 py-5 text-[18px] text-[#1f5078] shadow-[0_8px_20px_rgba(22,71,104,0.18)] outline-none placeholder:text-[#5c85a2] focus:border-[#8dbbda]" />
+              <input required type="password" minLength={8} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Create password" className="w-full rounded-[14px] border border-[#d6e4ec] bg-[linear-gradient(180deg,#fffefb_0%,#fbfbfd_100%)] px-7 py-5 text-[18px] text-[#1f5078] shadow-[0_8px_20px_rgba(22,71,104,0.18)] outline-none placeholder:text-[#5c85a2] focus:border-[#8dbbda]" />
               {errorMessage ? (
-                <p className="rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">{errorMessage}</p>
+                <p className="rounded-[12px] border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-white">{errorMessage}</p>
               ) : null}
-              <button type="submit" disabled={isSubmitting} className="w-full rounded-[22px] bg-gradient-to-r from-[#a9c7ff] to-[#4d93f7] px-8 py-5 text-xl font-bold text-[#03192f] shadow-[0_24px_60px_rgba(77,147,247,0.35)] disabled:cursor-not-allowed disabled:opacity-70">
+              <button type="submit" disabled={isSubmitting} className="w-full rounded-[12px] bg-[linear-gradient(90deg,#0f5ca0_0%,#1d6ea9_100%)] px-8 py-5 text-[18px] font-black text-white shadow-[0_14px_30px_rgba(13,77,138,0.24)] disabled:cursor-not-allowed disabled:opacity-70">
                 {isSubmitting ? 'Creating Account...' : 'Create Account'}
               </button>
-              <button type="button" onClick={onGoToLogin} className="text-sm font-bold text-[#b9d1ff] hover:text-white">
+              <button type="button" onClick={onGoToLogin} className="text-[16px] font-black text-white hover:text-[#eaf6ff]">
                 Already have an account? Sign in
               </button>
             </form>
@@ -3118,169 +3284,267 @@ function AuthForgotView({
 }
 
 function Home({ products, onShopClick, onProductSelect }: { products: Product[]; onShopClick: () => void; onProductSelect: (slug: string) => void; key?: string }) {
+  const featuredProducts = products.filter((product) => Boolean(product.img));
+  const bestSellers = (featuredProducts.length > 0 ? featuredProducts : products).slice(0, 4);
+  const categoryCards = Array.from(
+    new Map(
+      products
+        .filter((product) => product.category && product.img)
+        .map((product) => [
+          product.category,
+          {
+            key: product.category,
+            title: product.category.charAt(0) + product.category.slice(1).toLowerCase(),
+            desc: product.description ?? `${product.name} and related infrastructure-ready hardware solutions.`,
+            img: product.img,
+            slug: product.slug,
+          },
+        ]),
+    ).values(),
+  ).slice(0, 4);
+
+  const spotlightProduct =
+    bestSellers[0] ??
+    featuredProducts[0] ??
+    products[0] ??
+    null;
+  const heroServerImage = '/hero-server.png';
+
   return (
-    <motion.div 
+    <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="pt-20"
+      className="overflow-hidden bg-[linear-gradient(180deg,#0b4f91_0%,#0f67af_16%,#d8edf6_48%,#f5efe5_67%,#deedf2_100%)] pt-20"
     >
-      {/* Hero Section */}
-      <section className="relative min-h-[80vh] flex items-center overflow-hidden px-8 md:px-24">
-        <div className="absolute inset-0 z-0">
-          <div className="absolute top-1/4 -left-20 w-[600px] h-[600px] bg-[#aac7ff]/10 rounded-full blur-[120px]"></div>
-          <div className="absolute bottom-1/4 -right-20 w-[500px] h-[500px] bg-[#14d1ff]/5 rounded-full blur-[100px]"></div>
+      <section className="relative overflow-hidden px-6 pb-20 pt-10 md:px-12 lg:px-20">
+        <div className="absolute inset-0">
+          <div className="absolute left-[-18%] top-[-10%] h-[320px] w-[320px] rounded-full bg-white/12 blur-[80px] md:h-[520px] md:w-[520px]"></div>
+          <div className="absolute right-[-12%] top-[10%] h-[260px] w-[260px] rounded-full bg-[#8fe2ff]/25 blur-[90px] md:h-[420px] md:w-[420px]"></div>
+          <div className="absolute bottom-[-8%] left-[18%] h-[220px] w-[220px] rounded-full bg-[#003a73]/30 blur-[80px] md:h-[360px] md:w-[360px]"></div>
         </div>
 
-        <div className="relative z-10 max-w-4xl">
-          <span className="text-xs uppercase tracking-[0.3em] text-[#aac7ff] font-bold mb-6 block">Future of Infrastructure</span>
-          <h1 className="text-6xl md:text-8xl font-black tracking-tighter mb-8 text-slate-100 leading-[0.9]">
-            Next-generation technology for <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#aac7ff] via-[#14d1ff] to-[#3e90ff]">modern infrastructure</span>
-          </h1>
-          <p className="text-lg md:text-xl text-slate-400 max-w-2xl mb-12 leading-relaxed">
-            Experience innovation and performance for the digital luminary. Engineered for high-speed connectivity and unparalleled processing power.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-6">
-            <button 
-              onClick={onShopClick}
-              className="px-10 py-5 rounded-2xl bg-gradient-to-br from-[#aac7ff] to-[#3e90ff] text-[#003064] font-bold text-lg hover:shadow-[0_0_40px_rgba(62,144,255,0.3)] transition-all active:scale-95"
-            >
-              Explore Products
-            </button>
-            <button className="px-10 py-5 rounded-2xl border border-white/10 text-[#aac7ff] font-bold text-lg hover:bg-white/5 transition-all active:scale-95">
-              Discover Solutions
-            </button>
+        <div className="relative mx-auto grid max-w-[1320px] items-center gap-10 lg:grid-cols-[minmax(0,1.05fr)_420px]">
+          <div className="max-w-3xl">
+            <span className="mb-5 inline-block text-[11px] font-bold uppercase tracking-[0.34em] text-[#d8efff]">
+              Future Infrastructure
+            </span>
+            <h1 className="max-w-4xl text-5xl font-black uppercase leading-[0.92] tracking-[-0.06em] text-white sm:text-6xl md:text-7xl lg:text-[82px]">
+              Next-
+              <br />
+              Generation
+              <br />
+              Technology
+              <br />
+              For Modern
+              <br />
+              Infrastructure
+            </h1>
+            <p className="mt-7 max-w-xl text-sm leading-7 text-[#d8ecfb] sm:text-base">
+              Empowering your digital backbone with enterprise-grade hardware, high-speed connectivity, and modern compute systems designed for resilient operations.
+            </p>
+            <div className="mt-10 flex flex-col gap-4 sm:flex-row">
+              <button
+                onClick={onShopClick}
+                className="rounded-[18px] border border-white/30 bg-[linear-gradient(180deg,#f7fbff_0%,#d7ecfa_100%)] px-8 py-4 text-sm font-black uppercase tracking-[0.22em] text-[#0d4d8a] shadow-[0_18px_40px_rgba(6,30,58,0.22)] transition-transform hover:scale-[1.01]"
+              >
+                Explore Products
+              </button>
+              <button
+                onClick={() => spotlightProduct && onProductSelect(spotlightProduct.slug)}
+                className="rounded-[18px] border border-white/30 bg-[#0b4b87]/30 px-8 py-4 text-sm font-black uppercase tracking-[0.22em] text-white backdrop-blur-sm transition-colors hover:bg-white/10"
+              >
+                Discover Solutions
+              </button>
+            </div>
           </div>
-        </div>
 
-        <div className="absolute right-0 top-1/2 -translate-y-1/2 hidden lg:block w-1/3 opacity-60">
-          <img 
-            alt="Server hardware" 
-            className="w-full h-auto object-cover" 
-            src="https://lh3.googleusercontent.com/aida-public/AB6AXuCeXEaeKk1WrUB63SMo-N0cvovLpsfDPgi_lU1uQn7WbOXEsvQd1e5Wa0mPxH01_MvWhnH23rVgSGBgySVbvxNZ1G5NRYL2iGiYvwJzUYAZA45IyNxd0WeyODidlBbA7SXhutS2ly2hnhVjsaR0vEtCtiDZ_qDu8vSqOh3ZlNZuQgY5Tw0RaA24azrde8u846g24ICmUxvB3RKn4x-raoDlGyz17gy9WleyEkbhSltX1Hl-0EmHTFLnWuS6CFp7i6DOkplqNArAwbtC"
-            referrerPolicy="no-referrer"
-          />
-        </div>
-      </section>
-
-      {/* Featured Categories */}
-      <section className="py-32 px-8 md:px-24 bg-[#181c21]">
-        <div className="mb-20 text-center">
-          <h2 className="text-4xl font-bold tracking-tight text-slate-100 mb-4">Curated Engineering</h2>
-          <div className="h-1 w-24 bg-[#aac7ff] mx-auto rounded-full"></div>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-          {[
-            { title: "Processors", desc: "Ultra-efficient multi-core compute engines.", img: "https://lh3.googleusercontent.com/aida-public/AB6AXuDp0KEdaGdGbkMYURtpl7ALxvrwOa4iLj3c8O4D8gHYYqUnkrad2_dtvDBKrCUH43eXN3bz0_UFSZnOp5yUlfvoWIDcyOve3usV2EcMerkkx1DcRmLscU3gcymcCTrcnNf5Pu9NYTZIgVho6mLrI4aI9ty5EAVVbkt14bT__UjoJMteub1sv_sK9hsm-vIN-pkFErL7mOMYatN1aLahjQxMdn0xsAVFeLNBga_s6IDgH9XzobThpSwOeSB0osXssqyTKoiNDQ9LcrKM" },
-            { title: "Graphics", desc: "Real-time rendering at scale.", img: "https://lh3.googleusercontent.com/aida-public/AB6AXuAcuB_UEL0socYjiXJrmJfjieRWPCENBYpqcvEdmp1ruY7rpY0dHupkPIlUDD3JL2q4NjcLSaF2EuVBr22h89qTN0UzE7S_RvpXA6STywJ1Pp6gDRY8ShPRuCmcDLK71ctSO2eNO6KVCwpMVA1ByjmEIyUqMdxVGASvY1GSmXQKBb4wiGN9yMlvRqI-qgvoSluZAaSsDqn1yqhWYMYw1iDOiXrkwmaGhWCkQdET-FFXVenC-x5S1J_K4GV25sl4z3fRAYfJBzdJpTZl" },
-            { title: "Memory", desc: "Low-latency high-bandwidth modules.", img: "https://lh3.googleusercontent.com/aida-public/AB6AXuCFdZRDgwUS5nKcimTjlsRKUe3kIBzmTQMNm6X2QdFI6JqOrWlso3geYu1kV5UKzsto5tCIdqEuYJeUEcl0bqD2JHXCH_hCDJ6ACsgGo1TzeuAKcR5BU9K3bkScipCQvki4QMt83a9XmX6DfKnVdP-fgC6A-owmF7Jx1dP1zpNFOYiWj8sfwAf-uMK745L70qKNojQDxbMS6z-GUyAnmn6td9TC_vMaDYf1DYR32cckwHFDDH0OovQQdJbcRP-cY5aEWIE8gtX2vYFi" },
-            { title: "Networking", desc: "Enterprise-grade connectivity solutions.", img: "https://lh3.googleusercontent.com/aida-public/AB6AXuDSIJpFpMHRsS6REaRZytWom7r8oxl9phlKNLPwFpPru9GAwSMdUCoR3g0bLegLOsb6yHQjSOWXY404oqbxHBGO6uUstPK6FqiBdFGcHZvnGp9YfZcFEI5bG4w6zxVPxOrHL-fHu2j5JB5iJGaTXo1byCHkG8C_5lDLwPPFYQNK7CpqhOetrAAw5c82qD6x4LV7-5uUhO12qxj2Yjdgj9Evfte2YnV5BEKJZkFr0gOc_gvf42Gs5NuLYf8WoGuTvsy2qXR8qnrV39Gr" }
-          ].map((cat, i) => (
-            <div key={i} className="bg-[#262a30]/50 backdrop-blur-md p-8 rounded-2xl border border-white/5 hover:border-[#aac7ff]/30 transition-all group cursor-pointer">
-              <div className="aspect-square mb-8 overflow-hidden rounded-xl bg-[#0a0e13]">
-                <img 
-                  alt={cat.title} 
-                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" 
-                  src={cat.img}
+          <div className="hidden justify-self-end lg:block">
+            <div className="relative -mr-8 p-2">
+              <div className="absolute inset-x-16 top-10 h-14 rounded-full bg-white/12 blur-3xl"></div>
+              <div className="absolute right-8 top-[16%] h-[300px] w-[300px] rounded-full bg-[#9ddfff]/18 blur-[110px]"></div>
+              <div className="absolute bottom-6 left-[10%] h-[220px] w-[220px] rounded-full bg-[#063c72]/45 blur-[90px]"></div>
+              <div className="relative aspect-[0.98/1.05] w-[560px] overflow-hidden">
+                <img
+                  alt="Havtel server rack"
+                  className="h-[112%] w-[112%] object-contain object-bottom drop-shadow-[0_20px_38px_rgba(3,19,40,0.22)]"
+                  src={heroServerImage}
+                  onError={(event) => {
+                    if (spotlightProduct?.img && event.currentTarget.src !== spotlightProduct.img) {
+                      event.currentTarget.src = spotlightProduct.img;
+                    }
+                  }}
                   referrerPolicy="no-referrer"
                 />
               </div>
-              <h3 className="text-2xl font-bold text-slate-100 mb-2">{cat.title}</h3>
-              <p className="text-slate-400 mb-6 text-sm">{cat.desc}</p>
-              <button onClick={onShopClick} className="text-[#aac7ff] font-bold text-xs tracking-widest uppercase flex items-center gap-2 group-hover:gap-4 transition-all">
-                View More <ArrowRight size={14} />
-              </button>
             </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Best Sellers */}
-      <section className="py-32 px-8 md:px-24">
-        <div className="flex justify-between items-end mb-16">
-          <div>
-            <h2 className="text-4xl font-bold tracking-tight text-slate-100 mb-4">Best Sellers</h2>
-            <p className="text-slate-400">The most sought-after components in the industry.</p>
           </div>
-          <button onClick={onShopClick} className="text-[#aac7ff] font-bold text-sm flex items-center gap-2 hover:gap-4 transition-all">
-            View All Catalog <ChevronRight size={18} />
-          </button>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
-          {products.slice(0, 4).map((prod) => (
-            <div
-              key={prod.id}
-              onClick={() => onProductSelect(prod.slug)}
-              className="bg-[#1c2025]/50 border border-white/5 rounded-2xl overflow-hidden group hover:border-[#aac7ff]/30 transition-all cursor-pointer"
-            >
-              <div className="aspect-square relative overflow-hidden bg-[#0a0e13]">
-                {prod.img && (
-                  <img
-                    src={prod.img}
-                    alt={prod.name}
-                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                    referrerPolicy="no-referrer"
-                  />
-                )}
-              </div>
-              <div className="p-6">
-                <span className="text-[10px] font-black tracking-widest text-slate-500 mb-2 block">{prod.series}</span>
-                <h3 className="text-lg font-bold text-slate-100 mb-6">{prod.name}</h3>
-                <div className="flex justify-between items-center">
-                  <span className="text-lg font-black text-slate-100">{prod.priceString}</span>
-                  <button
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onProductSelect(prod.slug);
-                    }}
-                    className="p-2 bg-white/5 rounded-lg text-slate-400 hover:bg-[#aac7ff] hover:text-[#003064] transition-all"
-                  >
-                    <ShoppingCart size={16} />
-                  </button>
-                </div>
-              </div>
-            </div>
-          ))}
         </div>
       </section>
 
-      {/* Promo Banner */}
-      <section className="px-8 md:px-24 py-20">
-        <div className="relative rounded-[40px] overflow-hidden bg-gradient-to-br from-[#1c2025] to-[#0a0e13] border border-white/5 p-12 md:p-24 flex flex-col md:flex-row items-center gap-12">
-          <div className="absolute top-0 right-0 w-1/2 h-full bg-[#aac7ff]/5 blur-[120px] pointer-events-none"></div>
-          <div className="flex-1 relative z-10">
-            <span className="bg-[#aac7ff]/10 text-[#aac7ff] px-4 py-1 rounded-full text-[10px] font-black tracking-widest mb-8 inline-block">FLAGSHIP RELEASE</span>
-            <h2 className="text-5xl md:text-7xl font-black tracking-tighter text-slate-100 mb-8 leading-none">Quantum <br/>X-Series</h2>
-            <p className="text-slate-400 text-lg mb-12 max-w-md">The pinnacle of silicon engineering. 128 cores of pure, unadulterated processing power for the next generation of AI and rendering.</p>
-            <button onClick={onShopClick} className="bg-white text-[#003064] px-10 py-5 rounded-2xl font-bold text-lg hover:bg-[#aac7ff] transition-all">
-              Pre-order Now
+      <section className="px-6 py-16 md:px-12 lg:px-20">
+        <div className="mx-auto max-w-[1320px]">
+          <div className="mb-10 text-center">
+            <div className="inline-flex items-center gap-4">
+              <div className="h-px w-10 bg-[#2f638d]/40"></div>
+              <h2 className="text-3xl font-black tracking-[-0.05em] text-[#183c66] md:text-4xl">Curated Engineering</h2>
+              <div className="h-px w-10 bg-[#2f638d]/40"></div>
+            </div>
+          </div>
+
+          <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+            {(categoryCards.length > 0 ? categoryCards : bestSellers).map((card) => (
+              <button
+                key={card.key ?? card.id}
+                type="button"
+                onClick={() => onProductSelect(card.slug)}
+                className="group rounded-[28px] border border-white/40 bg-[linear-gradient(180deg,#8ec3e8_0%,#9fd2ee_100%)] p-5 text-left shadow-[0_22px_45px_rgba(59,109,151,0.18)] transition-transform hover:-translate-y-1"
+              >
+                <div className="rounded-[22px] border border-[#d9ebf7] bg-[#f7f0e6] p-4 shadow-inner">
+                  <div className="aspect-square overflow-hidden rounded-[16px] bg-white">
+                    {card.img ? (
+                      <img
+                        alt={card.title ?? card.name}
+                        className="h-full w-full object-contain transition-transform duration-500 group-hover:scale-105"
+                        src={card.img}
+                        referrerPolicy="no-referrer"
+                      />
+                    ) : (
+                      <div className="flex h-full items-center justify-center text-xs font-bold uppercase tracking-[0.2em] text-[#54708c]">
+                        No Image
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <h3 className="mt-4 text-xl font-black tracking-[-0.04em] text-white">{card.title ?? card.name}</h3>
+                <p className="mt-2 line-clamp-2 text-sm leading-6 text-[#eef8ff]">
+                  {card.desc ?? card.description ?? 'Precision-engineered components for modern infrastructure environments.'}
+                </p>
+                <div className="mt-4 inline-flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.22em] text-[#123c67]">
+                  View More <ArrowRight size={14} />
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="px-6 py-16 md:px-12 lg:px-20">
+        <div className="mx-auto max-w-[1320px] rounded-[34px] border border-white/35 bg-[linear-gradient(180deg,rgba(247,241,231,0.92)_0%,rgba(237,247,251,0.82)_100%)] p-6 shadow-[0_26px_60px_rgba(46,90,128,0.12)] md:p-8">
+          <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+            <div>
+              <h2 className="text-3xl font-black tracking-[-0.05em] text-[#183c66] md:text-4xl">Best Sellers</h2>
+              <p className="mt-2 text-sm text-[#4f6780]">A curated lineup of the most requested components in the current catalog.</p>
+            </div>
+            <button
+              onClick={onShopClick}
+              className="inline-flex items-center gap-2 text-sm font-black uppercase tracking-[0.2em] text-[#0d4d8a] transition-colors hover:text-[#062d57]"
+            >
+              View All Catalog <ChevronRight size={16} />
             </button>
           </div>
-          <div className="flex-1 relative z-10">
-            <img 
-              src="https://lh3.googleusercontent.com/aida-public/AB6AXuDp0KEdaGdGbkMYURtpl7ALxvrwOa4iLj3c8O4D8gHYYqUnkrad2_dtvDBKrCUH43eXN3bz0_UFSZnOp5yUlfvoWIDcyOve3usV2EcMerkkx1DcRmLscU3gcymcCTrcnNf5Pu9NYTZIgVho6mLrI4aI9ty5EAVVbkt14bT__UjoJMteub1sv_sK9hsm-vIN-pkFErL7mOMYatN1aLahjQxMdn0xsAVFeLNBga_s6IDgH9XzobThpSwOeSB0osXssqyTKoiNDQ9LcrKM" 
-              alt="Quantum X-Series" 
-              className="w-full h-auto drop-shadow-[0_0_50px_rgba(170,199,255,0.2)]"
-              referrerPolicy="no-referrer"
-            />
+
+          <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
+            {bestSellers.map((prod) => (
+              <button
+                key={prod.id}
+                type="button"
+                onClick={() => onProductSelect(prod.slug)}
+                className="group rounded-[26px] border border-[#d4e7ef] bg-white/75 p-4 text-left shadow-[0_16px_30px_rgba(110,148,170,0.12)] transition-transform hover:-translate-y-1"
+              >
+                <div className="rounded-[20px] border border-[#e1eef4] bg-[#f8f2e8] p-4">
+                  <div className="aspect-square overflow-hidden rounded-[14px] bg-white">
+                    {prod.img ? (
+                      <img
+                        src={prod.img}
+                        alt={prod.name}
+                        className="h-full w-full object-contain transition-transform duration-500 group-hover:scale-105"
+                        referrerPolicy="no-referrer"
+                      />
+                    ) : (
+                      <div className="flex h-full items-center justify-center text-xs font-bold uppercase tracking-[0.2em] text-[#54708c]">
+                        No Image
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="mt-4">
+                  <span className="block text-[10px] font-black uppercase tracking-[0.24em] text-[#6d8397]">
+                    {prod.series || 'Havtel'}
+                  </span>
+                  <h3 className="mt-2 min-h-[56px] text-lg font-black tracking-[-0.04em] text-[#183c66]">{prod.name}</h3>
+                  <div className="mt-4 flex items-center justify-between">
+                    <span className="text-lg font-black text-[#0d4d8a]">{prod.priceString}</span>
+                    <span className="inline-flex h-9 w-9 items-center justify-center rounded-[12px] border border-[#bdd8e7] bg-[#0b4f91] text-white shadow-[0_12px_24px_rgba(13,77,138,0.2)]">
+                      <ShoppingCart size={15} />
+                    </span>
+                  </div>
+                </div>
+              </button>
+            ))}
           </div>
         </div>
       </section>
 
-      {/* Brand Trust */}
-      <section className="py-32 px-8 md:px-24 border-t border-white/5">
-        <div className="text-center mb-16">
-          <p className="text-xs font-bold tracking-[0.3em] text-slate-500 uppercase">Trusted by Industry Leaders</p>
-        </div>
-        <div className="flex flex-wrap justify-center items-center gap-12 md:gap-24 opacity-30 grayscale hover:grayscale-0 transition-all">
-          <div className="text-2xl font-black tracking-tighter">NVIDIA</div>
-          <div className="text-2xl font-black tracking-tighter">INTEL</div>
-          <div className="text-2xl font-black tracking-tighter">AMD</div>
-          <div className="text-2xl font-black tracking-tighter">ASUS</div>
-          <div className="text-2xl font-black tracking-tighter">CORSAIR</div>
+      <section className="px-6 py-16 md:px-12 lg:px-20">
+        <div className="mx-auto grid max-w-[1320px] gap-8 rounded-[38px] border border-white/40 bg-[linear-gradient(135deg,rgba(250,246,238,0.96)_0%,rgba(233,246,251,0.92)_100%)] p-7 shadow-[0_28px_70px_rgba(53,97,133,0.14)] md:grid-cols-[minmax(0,1fr)_360px] md:p-10">
+          <div className="max-w-xl">
+            <span className="inline-flex rounded-full border border-[#d7e8f2] bg-white/65 px-4 py-1 text-[10px] font-black uppercase tracking-[0.3em] text-[#8e7c57]">
+              Flagship Collection
+            </span>
+            <h2 className="mt-6 text-4xl font-black tracking-[-0.06em] text-[#2b5f95] md:text-6xl">
+              Quantum
+              <br />
+              X-Series
+            </h2>
+            <p className="mt-5 max-w-lg text-base leading-7 text-[#56728c]">
+              The next wave of enterprise hardware, engineered for resilient performance, efficient scaling, and modern infrastructure rollouts.
+            </p>
+            <button
+              onClick={() => spotlightProduct && onProductSelect(spotlightProduct.slug)}
+              className="mt-8 rounded-[18px] bg-[linear-gradient(180deg,#0f5ca0_0%,#0a477e_100%)] px-7 py-4 text-sm font-black uppercase tracking-[0.22em] text-white shadow-[0_18px_35px_rgba(11,79,145,0.24)] transition-transform hover:scale-[1.01]"
+            >
+              Explore Now
+            </button>
+          </div>
+
+          <div className="flex items-center justify-center rounded-[30px] border border-[#d8e8f0] bg-[linear-gradient(180deg,#f7f0e6_0%,#edf6fb_100%)] p-6">
+            <div className="w-full rounded-[24px] border border-white/80 bg-white/80 p-5 shadow-inner">
+              <div className="aspect-square overflow-hidden rounded-[18px] bg-[radial-gradient(circle_at_top,#e4f6ff_0%,#c7e3f2_26%,#f7f0e6_100%)]">
+                {spotlightProduct?.img ? (
+                  <img
+                    src={spotlightProduct.img}
+                    alt={spotlightProduct.name}
+                    className="h-full w-full object-contain"
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  <div className="flex h-full items-center justify-center text-xs font-bold uppercase tracking-[0.2em] text-[#54708c]">
+                    Featured Product
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
+      <section className="px-6 py-16 md:px-12 lg:px-20">
+        <div className="mx-auto max-w-[1320px]">
+          <div className="text-center">
+            <span className="text-[10px] font-black uppercase tracking-[0.34em] text-[#65839e]">
+              Trusted Manufacturers
+            </span>
+          </div>
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-x-10 gap-y-6 text-sm font-black uppercase tracking-[0.22em] text-[#4f6780] sm:text-base">
+            {['NVIDIA', 'INTEL', 'AMD', 'ASUS', 'CORSAIR'].map((brand) => (
+              <span key={brand} className="opacity-80">
+                {brand}
+              </span>
+            ))}
+          </div>
+        </div>
+      </section>
     </motion.div>
   );
 }
@@ -3317,93 +3581,90 @@ function Shop({ products, categories, isLoading, onAddToCart, onProductSelect }:
   }).sort((a, b) => {
     if (sortBy === 'Price: Low to High') return a.price - b.price;
     if (sortBy === 'Price: High to Low') return b.price - a.price;
-    return 0; // Popularity (default order)
+    return 0;
   });
 
-  const toggleBrand = (_brand: string) => {
-  };
+  const displayCategory = activeCategory || (categories[0]?.name?.toUpperCase() ?? 'PRODUCTS');
+  const categoryDescription = activeCategory
+    ? `Browse our selection of next-generation ${activeCategory.toLowerCase()}, engineered for extreme performance.`
+    : 'Browse our selection of next-generation components, engineered for extreme performance.';
 
   return (
-    <motion.div 
+    <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="pt-20 px-4 md:px-12 flex flex-col md:flex-row gap-8 md:gap-12 min-h-screen relative"
+      className="min-h-screen bg-white px-4 pb-16 pt-20 md:px-8 lg:px-12"
     >
-      {/* Mobile Sidebar Toggle */}
-      <button 
-        onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-        className="md:hidden fixed bottom-28 left-8 z-[60] w-14 h-14 bg-[#1c2025] border border-white/10 rounded-full flex items-center justify-center text-[#aac7ff] shadow-2xl"
+      <button
+        type="button"
+        onClick={() => setIsSidebarOpen((open) => !open)}
+        className="fixed bottom-28 left-6 z-[60] inline-flex h-14 w-14 items-center justify-center rounded-full border border-[#bdd8e7] bg-white text-[#0d4d8a] shadow-[0_18px_35px_rgba(76,129,163,0.24)] md:hidden"
       >
-        <Search size={20} />
+        <Package size={20} />
       </button>
 
-      {/* Sidebar */}
-      <aside className={`
-        fixed inset-0 z-[70] bg-[#101419] p-8 md:relative md:inset-auto md:z-0 md:bg-transparent md:p-0
-        w-full md:w-64 flex-shrink-0 transition-transform duration-300
-        ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
-      `}>
-        <div className="flex justify-between items-center mb-12 md:block">
-          <div>
-            <span className="text-[10px] uppercase tracking-[0.2em] text-slate-500 font-bold block mb-2">Catalog</span>
-            <span className="text-xs text-slate-400 font-medium">HIGH-PERFORMANCE HARDWARE</span>
+      <div className="mx-auto flex w-full max-w-[1720px] gap-10 py-6 lg:gap-12">
+        <aside className={`fixed inset-y-0 left-0 z-[70] w-[290px] overflow-y-auto border-r border-[#d5e6ef] bg-white p-6 shadow-[0_20px_45px_rgba(76,129,163,0.16)] transition-transform duration-300 md:sticky md:top-24 md:h-fit md:translate-x-0 md:rounded-[20px] md:border md:p-6 md:shadow-[0_18px_40px_rgba(107,154,187,0.12)] ${
+          isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}>
+          <div className="mb-10 flex items-center justify-between md:block">
+            <div>
+              <span className="block text-[11px] font-black uppercase tracking-[0.16em] text-[#76a0bc]">High-Performance Hardware</span>
+            </div>
+            <button type="button" onClick={() => setIsSidebarOpen(false)} className="text-[#537089] md:hidden">
+              <X size={22} />
+            </button>
           </div>
-          <button onClick={() => setIsSidebarOpen(false)} className="md:hidden text-slate-400">
-            <ChevronLeft size={24} />
-          </button>
-        </div>
 
-        <div className="mb-12">
-          <span className="text-[10px] uppercase tracking-[0.2em] text-slate-500 font-bold block mb-4">Categories</span>
-          <nav className="space-y-1 max-h-[calc(5*3.25rem)] overflow-y-auto pr-1 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-white/10">
-            {isLoading ? (
-              <div className="px-4 py-3 text-xs text-slate-500">Loading...</div>
-            ) : (
-              <>
-                <button
-                  onClick={() => { setActiveCategory(''); setIsSidebarOpen(false); }}
-                  className={`w-full flex items-center gap-4 px-4 py-3 rounded-lg text-xs font-bold transition-all ${
-                    activeCategory === ''
-                      ? 'bg-[#3e90ff]/10 text-[#aac7ff] border-l-2 border-[#aac7ff]'
-                      : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
-                  }`}
-                >
-                  <Package size={16} />
-                  ALL
-                </button>
-                {categories.filter(c => c.is_active).map((cat) => {
-                  const IconComponent = cat.icon ? (ICON_MAP[cat.icon] ?? Package) : Package;
-                  const catKey = cat.name.toUpperCase();
-                  return (
-                    <button
-                      key={cat.id}
-                      onClick={() => { setActiveCategory(catKey); setIsSidebarOpen(false); }}
-                      className={`w-full flex items-center gap-4 px-4 py-3 rounded-lg text-xs font-bold transition-all ${
-                        activeCategory === catKey
-                          ? 'bg-[#3e90ff]/10 text-[#aac7ff] border-l-2 border-[#aac7ff]'
-                          : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
-                      }`}
-                    >
-                      <IconComponent size={16} />
-                      {cat.name.toUpperCase()}
-                    </button>
-                  );
-                })}
-              </>
-            )}
-          </nav>
-        </div>
+          <div className="mb-10">
+            <nav className="space-y-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveCategory('');
+                  setIsSidebarOpen(false);
+                }}
+                className={`flex w-full items-center justify-center rounded-[12px] px-5 py-3 text-center text-[14px] font-black uppercase tracking-[-0.02em] transition-all ${
+                  activeCategory === ''
+                    ? 'bg-[linear-gradient(90deg,#97c7e4_0%,#add9ef_100%)] text-[#1b4f7e] shadow-[0_14px_30px_rgba(95,168,215,0.16)]'
+                    : 'text-[#1d67a7] hover:bg-white/50'
+                }`}
+              >
+                All
+              </button>
+              {categories.filter(c => c.is_active).map((cat) => {
+                const catKey = cat.name.toUpperCase();
+                return (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => {
+                      setActiveCategory(catKey);
+                      setIsSidebarOpen(false);
+                    }}
+                    className={`flex w-full items-center justify-center rounded-[12px] px-5 py-3 text-center text-[14px] font-black uppercase tracking-[-0.02em] transition-all ${
+                      activeCategory === catKey
+                        ? 'bg-[linear-gradient(90deg,#97c7e4_0%,#add9ef_100%)] text-[#1b4f7e] shadow-[0_14px_30px_rgba(95,168,215,0.16)]'
+                        : 'text-[#1d67a7] hover:bg-white/50'
+                    }`}
+                  >
+                    {cat.name}
+                  </button>
+                );
+              })}
+              {isLoading ? <div className="px-2 py-3 text-xs text-[#6d8397]">Loading categories...</div> : null}
+            </nav>
+          </div>
 
-        <div className="space-y-8">
-          <div>
-            <span className="text-[10px] uppercase tracking-[0.2em] text-slate-500 font-bold block mb-6">Price Range</span>
-            <div className="px-2">
-              <div className="h-1 bg-white/10 rounded-full relative">
-                <div className="absolute left-0 right-1/4 h-full bg-[#3e90ff] rounded-full"></div>
-                <div className="absolute left-[75%] top-1/2 -translate-y-1/2 w-4 h-4 bg-[#aac7ff] rounded-full shadow-[0_0_10px_rgba(170,199,255,0.5)] cursor-pointer"></div>
+          <div className="mb-10">
+            <div className="mb-4 text-[11px] font-black uppercase tracking-[0.04em] text-[#5d89a7]">Price Range</div>
+            <div className="pr-2">
+              <div className="relative h-2 rounded-full bg-[#dcecf5]">
+                <div className="absolute left-0 right-[24%] h-full rounded-full bg-[#5fa8d7]"></div>
+                <div className="absolute left-[74%] top-1/2 h-4 w-4 -translate-y-1/2 rounded-full border-2 border-white bg-[#0d4d8a] shadow-[0_0_0_4px_rgba(95,168,215,0.2)]"></div>
               </div>
-              <div className="flex justify-between mt-4 text-[10px] text-slate-500 font-bold">
+              <div className="mt-4 flex justify-between text-xs font-bold text-[#6d8397]">
                 <span>$0</span>
                 <span>$2,500</span>
               </div>
@@ -3411,135 +3672,157 @@ function Shop({ products, categories, isLoading, onAddToCart, onProductSelect }:
           </div>
 
           <div>
-            <span className="text-[10px] uppercase tracking-[0.2em] text-slate-500 font-bold block mb-6">Brands</span>
+            <div className="mb-4 text-[11px] font-black uppercase tracking-[0.04em] text-[#5d89a7]">Brands</div>
             <div className="space-y-4">
               {['Havtel Core', 'Titan Series', 'Aether Tech'].map((brand) => (
-                <label key={brand} className="flex items-center gap-3 cursor-pointer group">
-                  <div
-                    onClick={() => toggleBrand(brand)}
-                    className="w-4 h-4 border border-white/20 rounded flex items-center justify-center transition-colors group-hover:border-[#aac7ff]"
-                  />
-                  <span className="text-xs text-slate-400 group-hover:text-slate-200 transition-colors">{brand}</span>
+                <label key={brand} className="flex items-center gap-3 text-sm text-[#537089]">
+                  <span className="inline-flex h-5 w-5 rounded-[4px] border border-[#9fc3db] bg-white shadow-inner"></span>
+                  {brand}
                 </label>
               ))}
             </div>
+            <button className="mt-8 w-full rounded-[12px] bg-[linear-gradient(90deg,#0f5ca0_0%,#1a6fb0_100%)] px-5 py-4 text-sm font-black uppercase tracking-[0.08em] text-white shadow-[0_16px_30px_rgba(13,77,138,0.24)]">
+              Apply Filters
+            </button>
           </div>
+        </aside>
 
-          <button 
+        {isSidebarOpen ? (
+          <button
+            type="button"
             onClick={() => setIsSidebarOpen(false)}
-            className="w-full py-4 bg-[#3e90ff] text-white font-bold text-xs rounded-xl hover:shadow-[0_0_20px_rgba(62,144,255,0.3)] transition-all"
-          >
-            APPLY FILTERS
-          </button>
-        </div>
-      </aside>
+            className="fixed inset-0 z-[65] bg-[#0d3558]/25 md:hidden"
+            aria-label="Close filters"
+          />
+        ) : null}
 
-      {/* Main Content */}
-      <main className="flex-1 py-12">
-        <div className="flex flex-col lg:flex-row justify-between items-start gap-8 mb-12">
-          <div>
-            <h1 className="text-5xl font-black tracking-tighter text-slate-100 mb-4 capitalize">{activeCategory.toLowerCase()}</h1>
-            <p className="text-slate-400 text-sm max-w-lg">
-              Browse our selection of next-generation {activeCategory.toLowerCase()}, engineered for extreme performance.
-            </p>
-          </div>
-          <div className="flex flex-col sm:flex-row gap-4 w-full lg:w-auto">
-            <div className="relative flex-1 sm:flex-none">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
-              <input 
-                type="text" 
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search components..." 
-                className="bg-[#1c2025] border border-white/5 rounded-xl pl-12 pr-6 py-3 text-xs text-slate-300 focus:outline-none focus:border-[#aac7ff]/50 w-full sm:w-64"
-              />
+        <main className="min-w-0 flex-1 pt-2 md:pl-0">
+          <div className="mb-10 grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_520px]">
+            <div>
+              <h1 className="text-5xl font-black uppercase tracking-[-0.07em] text-[#1861a6] md:text-[68px]">
+                {displayCategory.toLowerCase()}
+              </h1>
+              <p className="mt-4 max-w-[620px] text-[16px] italic leading-7 text-[#6e97b1]">
+                {categoryDescription}
+              </p>
             </div>
-            <select 
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
-              className="bg-[#1c2025] border border-white/5 rounded-xl px-6 py-3 text-xs text-slate-300 focus:outline-none appearance-none cursor-pointer min-w-[140px]"
-            >
-              <option>Popularity</option>
-              <option>Price: Low to High</option>
-              <option>Price: High to Low</option>
-            </select>
-          </div>
-        </div>
-
-        {filteredProducts.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-12">
-            {filteredProducts.map((prod) => (
-              <div
-                key={prod.id}
-                onClick={() => onProductSelect(prod.slug)}
-                className="bg-[#1c2025]/50 border border-white/5 rounded-2xl overflow-hidden group hover:border-[#aac7ff]/30 transition-all cursor-pointer"
-              >
-                <div className="aspect-square relative overflow-hidden bg-[#0a0e13]">
-                  {prod.tag && (
-                    <span className={`absolute top-4 right-4 z-10 px-3 py-1 rounded-full text-[10px] font-black tracking-widest ${
-                      prod.tag === 'LIMITED' ? 'bg-[#f06627] text-white' : 'bg-[#aac7ff] text-[#003064]'
-                    }`}>
-                      {prod.tag}
-                    </span>
-                  )}
-                  {prod.img && (
-                    <img
-                      src={prod.img}
-                      alt={prod.name}
-                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                      referrerPolicy="no-referrer"
-                    />
-                  )}
-                </div>
-                <div className="p-6">
-                  <span className="text-[10px] font-black tracking-widest text-slate-500 mb-2 block">{prod.series}</span>
-                  <h3 className="text-lg font-bold text-slate-100 mb-6">{prod.name}</h3>
-                  <div className="flex justify-between items-center">
-                    <span className="text-lg font-black text-slate-100">{prod.priceString}</span>
-                    <button
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onAddToCart(prod.slug);
-                      }}
-                      className="p-2 bg-white/5 rounded-lg text-slate-400 hover:bg-[#aac7ff] hover:text-[#003064] transition-all"
-                    >
-                      <ShoppingCart size={16} />
-                    </button>
-                  </div>
-                </div>
+            <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_150px]">
+              <div className="relative">
+                <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-[#81a7c0]" size={18} />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search components..."
+                  className="w-full rounded-[12px] border border-[#bcd7e6] bg-[linear-gradient(90deg,rgba(189,220,239,0.92)_0%,rgba(163,206,233,0.82)_100%)] py-3.5 pl-14 pr-5 text-sm text-[#315c80] shadow-[0_12px_30px_rgba(104,159,195,0.12)] outline-none placeholder:text-white/80 focus:border-[#79acd0]"
+                />
               </div>
-            ))}
-          </div>
-        ) : (
-          <div className="py-24 text-center">
-            <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mx-auto mb-6 text-slate-500">
-              <Search size={32} />
+              <div className="relative">
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                  className="w-full appearance-none rounded-[12px] border border-[#bcd7e6] bg-[linear-gradient(90deg,rgba(189,220,239,0.92)_0%,rgba(163,206,233,0.82)_100%)] px-5 py-3.5 pr-10 text-sm font-bold text-white shadow-[0_12px_30px_rgba(104,159,195,0.12)] outline-none focus:border-[#79acd0]"
+                >
+                  <option>Popularity</option>
+                  <option>Price: Low to High</option>
+                  <option>Price: High to Low</option>
+                </select>
+                <ChevronRight className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 rotate-90 text-white/90" size={18} />
+              </div>
             </div>
-            <h3 className="text-xl font-bold text-slate-100 mb-2">No products found</h3>
-            <p className="text-slate-400">Try adjusting your filters or search query.</p>
           </div>
-        )}
 
-        {/* Pagination */}
-        {filteredProducts.length > 0 && (
-          <div className="flex justify-center items-center gap-2">
-            <button className="p-2 text-slate-500 hover:text-slate-300"><ChevronLeft size={20} /></button>
-            {[1, 2, 3].map((n) => (
-              <button 
-                key={n} 
-                className={`w-10 h-10 rounded-lg text-xs font-bold transition-all ${
-                  n === 1 ? 'bg-[#aac7ff] text-[#003064]' : 'text-slate-500 hover:bg-white/5'
-                }`}
-              >
-                {n}
-              </button>
-            ))}
-            <span className="text-slate-500 px-2">...</span>
-            <button className="w-10 h-10 rounded-lg text-xs font-bold text-slate-500 hover:bg-white/5">12</button>
-            <button className="p-2 text-slate-500 hover:text-slate-300"><ChevronRight size={20} /></button>
+          <div className="mb-10 hidden grid-cols-[180px_1fr] gap-4 md:grid">
+            <div className="relative">
+            </div>
+            <div></div>
           </div>
-        )}
-      </main>
+
+          {filteredProducts.length > 0 ? (
+            <div className="grid max-w-[760px] grid-cols-1 gap-6 xl:grid-cols-2">
+              {filteredProducts.map((prod) => (
+                <button
+                  key={prod.id}
+                  type="button"
+                  onClick={() => onProductSelect(prod.slug)}
+                  className="group overflow-hidden rounded-[24px] border border-[#d5e3eb] bg-white/88 text-left shadow-[0_20px_45px_rgba(107,154,187,0.18)] transition-transform hover:-translate-y-1"
+                >
+                  <div className="relative rounded-t-[24px] border-b border-[#d6e7f0] bg-[radial-gradient(circle_at_top_left,#fff8de_0%,#ffffff_30%,#f3fbff_100%)] p-6">
+                    <span className="absolute right-5 top-5 rounded-full border border-[#d6e7f0] bg-[#f2f9fe] px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-[#7aa6c2] shadow-[0_6px_14px_rgba(107,154,187,0.14)]">
+                      In Stock
+                    </span>
+                    <div className="aspect-[0.96/0.82] overflow-hidden rounded-[18px]">
+                      {prod.img ? (
+                        <img
+                          src={prod.img}
+                          alt={prod.name}
+                          className="h-full w-full object-contain transition-transform duration-500 group-hover:scale-105"
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : (
+                        <div className="flex h-full items-center justify-center rounded-[18px] border border-dashed border-[#c7ddea] text-xs font-bold uppercase tracking-[0.2em] text-[#7a9ab2]">
+                          No Image
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="bg-[linear-gradient(90deg,#64add9_0%,#73b7df_100%)] p-5">
+                    <span className="block text-[10px] font-black uppercase tracking-[0.26em] text-white/85">
+                      {prod.series || 'Havtel Core'}
+                    </span>
+                    <h3 className="mt-3 min-h-[56px] text-[20px]/[1.1] font-black tracking-[-0.04em] text-white">
+                      {prod.name}
+                    </h3>
+                    <div className="mt-6 flex items-end justify-between gap-4">
+                      <span className="text-[20px] font-black tracking-[-0.04em] text-white">{prod.priceString}</span>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onAddToCart(prod.slug);
+                        }}
+                        className="inline-flex h-10 w-10 items-center justify-center rounded-[10px] bg-[#1c6aa7] text-white shadow-[0_12px_24px_rgba(13,77,138,0.22)] transition-colors hover:bg-[#0d4d8a]"
+                      >
+                        <ShoppingCart size={16} />
+                      </button>
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-[28px] border border-[#c8dce8] bg-white/70 px-6 py-20 text-center shadow-[0_18px_40px_rgba(107,154,187,0.12)]">
+              <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-[#edf7fc] text-[#6f96b2]">
+                <Search size={30} />
+              </div>
+              <h3 className="text-2xl font-black tracking-[-0.04em] text-[#1b4f7e]">No products found</h3>
+              <p className="mt-3 text-sm text-[#678096]">Try adjusting your filters or search query.</p>
+            </div>
+          )}
+
+          {filteredProducts.length > 0 && (
+            <div className="mt-12 flex max-w-[760px] justify-center items-center gap-2 text-[#5d7c93]">
+              <button className="p-2 transition-colors hover:text-[#0d4d8a]"><ChevronLeft size={20} /></button>
+              {[1, 2, 3].map((n) => (
+                <button
+                  key={n}
+                  className={`h-10 w-10 rounded-[10px] text-sm font-black transition-all ${
+                    n === 1
+                      ? 'bg-[#5fa8d7] text-white shadow-[0_10px_24px_rgba(95,168,215,0.25)]'
+                      : 'bg-white/70 text-[#5d7c93] hover:bg-[#e6f2f9]'
+                  }`}
+                >
+                  {n}
+                </button>
+              ))}
+              <span className="px-2 text-sm font-bold">...</span>
+              <button className="h-10 w-10 rounded-[10px] bg-white/70 text-sm font-black text-[#5d7c93] hover:bg-[#e6f2f9]">12</button>
+              <button className="p-2 transition-colors hover:text-[#0d4d8a]"><ChevronRight size={20} /></button>
+            </div>
+          )}
+        </main>
+      </div>
     </motion.div>
   );
 }
@@ -4438,109 +4721,115 @@ function Support() {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="pt-20 min-h-screen bg-[#11161c]"
+      className="min-h-screen bg-[linear-gradient(90deg,#ffffff_0%,#fbf7f4_70%,#fff6df_100%)] pt-20"
     >
-      <section className="relative overflow-hidden px-8 md:px-24 py-20 md:py-28">
+      <section className="relative overflow-hidden px-8 py-20 md:px-16 md:py-24">
         <div className="absolute inset-0">
-          <div className="absolute top-12 left-0 w-[520px] h-[520px] bg-[#aac7ff]/10 rounded-full blur-[140px]"></div>
-          <div className="absolute bottom-0 right-0 w-[460px] h-[460px] bg-[#3e90ff]/8 rounded-full blur-[120px]"></div>
+          <div className="absolute left-[-8%] top-[8%] h-[420px] w-[420px] rounded-full bg-[#e4f3fb] blur-[120px]"></div>
+          <div className="absolute right-[2%] top-[4%] h-[520px] w-[520px] rounded-full bg-[#f8f1eb] blur-[140px]"></div>
         </div>
 
-        <div className="relative z-10 max-w-4xl mb-16 md:mb-20">
-          <span className="text-xs uppercase tracking-[0.35em] text-[#aac7ff] font-bold mb-6 block">Connect With Excellence</span>
-          <h1 className="text-5xl md:text-7xl lg:text-8xl font-black tracking-tighter mb-8 text-slate-100 leading-[0.95] drop-shadow-[0_0_20px_rgba(170,199,255,0.15)]">
-            How can we help you?
-          </h1>
-          <p className="text-lg md:text-2xl text-slate-400 max-w-3xl leading-relaxed">
-            Welcome to HAVTEL CORP. Here you'll find the best technology solutions on the market. Place your order with confidence and connect with our team for fast, reliable assistance.
-          </p>
-        </div>
-
-        <div className="relative z-10 grid grid-cols-1 xl:grid-cols-[minmax(0,1.35fr)_420px] gap-10 xl:gap-16 items-start">
-          <div className="rounded-[32px] border border-white/5 bg-gradient-to-br from-[#20252d] via-[#1c2129] to-[#161b22] p-6 md:p-10 shadow-[0_30px_80px_rgba(0,0,0,0.35)]">
-            <div className="grid grid-cols-1 gap-8">
-              <label className="block">
-                <span className="text-[11px] uppercase tracking-[0.28em] text-[#b5cbff] font-bold block mb-4">Full Identity</span>
-                <input
-                  type="text"
-                  placeholder="Enter your name"
-                  className="w-full rounded-2xl bg-[#0b1016] border border-white/5 px-6 py-5 text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-[#aac7ff]/40 focus:shadow-[0_0_0_4px_rgba(170,199,255,0.08)] transition-all"
-                />
-              </label>
-
-              <label className="block">
-                <span className="text-[11px] uppercase tracking-[0.28em] text-[#b5cbff] font-bold block mb-4">Digital Coordinates</span>
-                <input
-                  type="email"
-                  placeholder="email@address.com"
-                  className="w-full rounded-2xl bg-[#0b1016] border border-white/5 px-6 py-5 text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-[#aac7ff]/40 focus:shadow-[0_0_0_4px_rgba(170,199,255,0.08)] transition-all"
-                />
-              </label>
-
-              <label className="block">
-                <span className="text-[11px] uppercase tracking-[0.28em] text-[#b5cbff] font-bold block mb-4">Inquiry Details</span>
-                <textarea
-                  placeholder="How may we assist you today?"
-                  rows={6}
-                  className="w-full resize-none rounded-2xl bg-[#0b1016] border border-white/5 px-6 py-5 text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-[#aac7ff]/40 focus:shadow-[0_0_0_4px_rgba(170,199,255,0.08)] transition-all"
-                />
-              </label>
-
-              <div className="pt-2">
-                <button className="inline-flex items-center gap-3 rounded-2xl bg-gradient-to-br from-[#aac7ff] to-[#3e90ff] px-8 py-5 text-lg font-bold text-[#003064] shadow-[0_12px_35px_rgba(62,144,255,0.25)] transition-all hover:scale-[1.02] hover:shadow-[0_20px_45px_rgba(62,144,255,0.35)] active:scale-[0.99]">
-                  Send Message
-                  <ArrowRight size={20} />
-                </button>
-              </div>
-            </div>
+        <div className="relative z-10 mx-auto max-w-[1720px]">
+          <div className="mb-12 max-w-[1220px] md:mb-16">
+            <span className="mb-6 block text-[12px] font-black uppercase tracking-[0.18em] text-[#5c95bd]">Connect With Excellence</span>
+            <h1 className="text-5xl font-black uppercase tracking-[-0.08em] text-[#1f6dad] md:text-[82px] lg:text-[94px]">
+              How can we help you?
+            </h1>
+            <p className="mt-8 max-w-[940px] text-[22px] italic leading-[1.7] text-[#5d95bc]">
+              Welcome to HAVTEL.CORP. Here you&apos;ll find the best technology solutions on the market. Place your order with confidence and connect with our team for fast, reliable assistance.
+            </p>
           </div>
 
-          <div className="space-y-6">
-            {[
-              {
-                icon: MapPin,
-                title: 'Global Headquarters',
-                lines: ['2531 NW 72nd Ave unit A', 'Miami, FL 33122', 'United States'],
-              },
-              {
-                icon: AtSign,
-                title: 'Electronic Mail',
-                lines: ['sales@havtel.com'],
-              },
-              {
-                icon: Phone,
-                title: 'Technical Line',
-                lines: ['786-332-4868', 'Monday - Friday 9AM - 05:00 PM'],
-              },
-            ].map((item) => (
-              <div key={item.title} className="flex gap-5 rounded-[28px] border border-white/5 bg-white/[0.03] p-5 md:p-6 backdrop-blur-sm">
-                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/5 text-[#aac7ff]">
-                  <item.icon size={22} />
-                </div>
-                <div>
-                  <h3 className="text-2xl font-bold tracking-tight text-slate-100 mb-3">{item.title}</h3>
-                  <div className="space-y-1 text-lg text-slate-400">
-                    {item.lines.map((line) => (
-                      <p key={line}>{line}</p>
-                    ))}
-                  </div>
+          <div className="grid grid-cols-1 items-start gap-10 xl:grid-cols-[minmax(0,1.28fr)_420px] xl:gap-18">
+            <div className="rounded-[18px] bg-[linear-gradient(90deg,#64add9_0%,#73b4db_100%)] p-6 shadow-[0_20px_50px_rgba(95,168,215,0.24)] md:p-11">
+              <div className="grid grid-cols-1 gap-6">
+                <label className="block">
+                  <span className="mb-4 block text-[12px] font-black uppercase tracking-[0.08em] text-white">Full Identity</span>
+                  <input
+                    type="text"
+                    placeholder="Enter your name"
+                    className="w-full rounded-[14px] border border-[#d6e4ec] bg-[linear-gradient(180deg,#fffefb_0%,#fbfbfd_100%)] px-6 py-5 text-[17px] text-[#1f5078] shadow-[0_8px_20px_rgba(22,71,104,0.18)] outline-none placeholder:text-[#5c85a2] focus:border-[#8dbbda]"
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="mb-4 block text-[12px] font-black uppercase tracking-[0.08em] text-white">Digital Coordinates</span>
+                  <input
+                    type="email"
+                    placeholder="email@address.com"
+                    className="w-full rounded-[14px] border border-[#d6e4ec] bg-[linear-gradient(180deg,#fffefb_0%,#fbfbfd_100%)] px-6 py-5 text-[17px] text-[#1f5078] shadow-[0_8px_20px_rgba(22,71,104,0.18)] outline-none placeholder:text-[#5c85a2] focus:border-[#8dbbda]"
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="mb-4 block text-[12px] font-black uppercase tracking-[0.08em] text-white">Digital Coordinates</span>
+                  <textarea
+                    placeholder="How may we assist you today?"
+                    rows={7}
+                    className="w-full resize-none rounded-[14px] border border-[#d6e4ec] bg-[linear-gradient(180deg,#fffefb_0%,#fbfbfd_100%)] px-6 py-5 text-[17px] text-[#1f5078] shadow-[0_8px_20px_rgba(22,71,104,0.18)] outline-none placeholder:text-[#5c85a2] focus:border-[#8dbbda]"
+                  />
+                </label>
+
+                <div className="pt-1">
+                  <button className="inline-flex items-center gap-2 rounded-[12px] bg-[linear-gradient(90deg,#0f5ca0_0%,#1d6ea9_100%)] px-8 py-4 text-[16px] font-black text-white shadow-[0_14px_30px_rgba(13,77,138,0.24)] transition-transform hover:scale-[1.01]">
+                    Send Message
+                    <ArrowRight size={20} />
+                  </button>
                 </div>
               </div>
-            ))}
+            </div>
 
-            <div className="relative overflow-hidden rounded-[32px] border border-white/5 bg-gradient-to-br from-white/10 via-white/[0.06] to-transparent min-h-[260px] p-8">
-              <div className="absolute inset-0 opacity-25" style={{
-                backgroundImage: 'linear-gradient(rgba(255,255,255,0.07) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.07) 1px, transparent 1px)',
-                backgroundSize: '24px 24px'
-              }}></div>
-              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(170,199,255,0.12),transparent_35%),radial-gradient(circle_at_bottom_right,rgba(62,144,255,0.14),transparent_30%)]"></div>
-              <div className="absolute left-[15%] top-[20%] w-3 h-3 rounded-full bg-[#aac7ff]/60"></div>
-              <div className="absolute right-[20%] top-[28%] w-2 h-2 rounded-full bg-white/40"></div>
-              <div className="absolute left-[55%] bottom-[24%] w-3 h-3 rounded-full bg-[#3e90ff]/50"></div>
-              <div className="relative z-10 flex h-full min-h-[196px] items-center justify-center">
-                <button className="rounded-full border border-[#aac7ff]/35 bg-[#7288b4]/30 px-8 py-4 text-lg font-medium text-[#cfe0ff] backdrop-blur-md transition-all hover:bg-[#7f96c6]/40">
-                  Miami Location
-                </button>
+            <div className="space-y-6 pt-[2px]">
+              {[
+                {
+                  icon: MapPin,
+                  title: 'Global Headquarters',
+                  lines: ['2531 NW 72nd Ave unit A', 'Miami, FL 33122', 'United States'],
+                },
+                {
+                  icon: AtSign,
+                  title: 'Electronic Mail',
+                  lines: ['sales@havtel.com'],
+                },
+                {
+                  icon: Phone,
+                  title: 'Technical Line',
+                  lines: ['786-332-4868', 'Monday - Friday 9am- 5:00 pm'],
+                },
+              ].map((item) => (
+                <div key={item.title} className="rounded-[16px] bg-[linear-gradient(90deg,rgba(177,213,235,0.92)_0%,rgba(163,204,231,0.92)_100%)] p-6 shadow-[0_14px_30px_rgba(107,154,187,0.16)]">
+                  <div className="flex gap-5">
+                    <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-[12px] bg-[linear-gradient(180deg,#66add9_0%,#6eaed4_100%)] text-white shadow-[0_10px_20px_rgba(76,129,163,0.24)]">
+                      <item.icon size={28} />
+                    </div>
+                    <div>
+                      <h3 className="text-[22px] font-black tracking-[-0.04em] text-white">{item.title}</h3>
+                      <div className="mt-3 space-y-1 text-[17px] font-semibold text-white/95">
+                        {item.lines.map((line) => (
+                          <p key={line}>{line}</p>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              <div className="relative overflow-hidden rounded-[28px] border border-[#d3e3ec] bg-[linear-gradient(180deg,#cfe4f2_0%,#bed9ea_100%)] p-6 shadow-[0_16px_30px_rgba(107,154,187,0.16)]">
+                <div
+                  className="absolute inset-0 opacity-45"
+                  style={{
+                    backgroundImage: 'linear-gradient(rgba(255,255,255,0.24) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.24) 1px, transparent 1px)',
+                    backgroundSize: '24px 24px',
+                  }}
+                ></div>
+                <div className="absolute left-[15%] top-[24%] h-3 w-3 rounded-full bg-white/90"></div>
+                <div className="absolute right-[18%] top-[18%] h-3 w-3 rounded-full bg-white/90"></div>
+                <div className="absolute left-[58%] bottom-[22%] h-3 w-3 rounded-full bg-white/90"></div>
+                <div className="relative z-10 flex min-h-[250px] items-center justify-center">
+                  <button className="rounded-full bg-[linear-gradient(90deg,#7db8dd_0%,#6face0_100%)] px-10 py-5 text-[18px] font-black text-white shadow-[0_14px_30px_rgba(95,168,215,0.25)]">
+                    Miami Location
+                  </button>
+                </div>
               </div>
             </div>
           </div>
