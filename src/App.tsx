@@ -2649,7 +2649,8 @@ function ProductDetailView({
     .slice()
     .sort((a, b) => a.sort_order - b.sort_order)
     .map((img) => img.url)
-    .filter(Boolean);
+    .filter(Boolean)
+    .filter((url, index, arr) => arr.indexOf(url) === index);
   const heroImage = gallery[selectedImage] ?? gallery[0] ?? null;
   const priceString = selectedVariant
     ? formatCurrency(parseFloat(selectedVariant.price))
@@ -3573,11 +3574,21 @@ function Shop({ products, categories, isLoading, onAddToCart, onProductSelect }:
   const [sortBy, setSortBy] = useState('Popularity');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
+  const maxProductPrice = Math.max(...products.map(p => p.price), 0);
+  const availableBrands = Array.from(new Set(products.map(p => p.brand).filter(Boolean)));
+
+  const [pendingBrands, setPendingBrands] = useState<Set<string>>(new Set());
+  const [pendingMaxPrice, setPendingMaxPrice] = useState<number>(Infinity);
+  const [activeBrands, setActiveBrands] = useState<Set<string>>(new Set());
+  const [activeMaxPrice, setActiveMaxPrice] = useState<number>(Infinity);
+
   const filteredProducts = products.filter(prod => {
     const matchesCategory = !activeCategory || prod.category === activeCategory;
     const matchesSearch = prod.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          prod.series.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCategory && matchesSearch;
+    const matchesBrand = activeBrands.size === 0 || activeBrands.has(prod.brand);
+    const matchesPrice = activeMaxPrice === Infinity || prod.price <= activeMaxPrice;
+    return matchesCategory && matchesSearch && matchesBrand && matchesPrice;
   }).sort((a, b) => {
     if (sortBy === 'Price: Low to High') return a.price - b.price;
     if (sortBy === 'Price: High to Low') return b.price - a.price;
@@ -3660,13 +3671,18 @@ function Shop({ products, categories, isLoading, onAddToCart, onProductSelect }:
           <div className="mb-10">
             <div className="mb-4 text-[11px] font-black uppercase tracking-[0.04em] text-[#5d89a7]">Price Range</div>
             <div className="pr-2">
-              <div className="relative h-2 rounded-full bg-[#dcecf5]">
-                <div className="absolute left-0 right-[24%] h-full rounded-full bg-[#5fa8d7]"></div>
-                <div className="absolute left-[74%] top-1/2 h-4 w-4 -translate-y-1/2 rounded-full border-2 border-white bg-[#0d4d8a] shadow-[0_0_0_4px_rgba(95,168,215,0.2)]"></div>
-              </div>
-              <div className="mt-4 flex justify-between text-xs font-bold text-[#6d8397]">
+              <input
+                type="range"
+                min={0}
+                max={maxProductPrice || 2500}
+                step={10}
+                value={pendingMaxPrice === Infinity ? (maxProductPrice || 2500) : pendingMaxPrice}
+                onChange={(e) => setPendingMaxPrice(Number(e.target.value))}
+                className="w-full accent-[#0d4d8a]"
+              />
+              <div className="mt-2 flex justify-between text-xs font-bold text-[#6d8397]">
                 <span>$0</span>
-                <span>$2,500</span>
+                <span>{pendingMaxPrice === Infinity ? formatCurrency(maxProductPrice || 2500) : formatCurrency(pendingMaxPrice)}</span>
               </div>
             </div>
           </div>
@@ -3674,14 +3690,31 @@ function Shop({ products, categories, isLoading, onAddToCart, onProductSelect }:
           <div>
             <div className="mb-4 text-[11px] font-black uppercase tracking-[0.04em] text-[#5d89a7]">Brands</div>
             <div className="space-y-4">
-              {['Havtel Core', 'Titan Series', 'Aether Tech'].map((brand) => (
-                <label key={brand} className="flex items-center gap-3 text-sm text-[#537089]">
-                  <span className="inline-flex h-5 w-5 rounded-[4px] border border-[#9fc3db] bg-white shadow-inner"></span>
+              {availableBrands.map((brand) => (
+                <label key={brand} className="flex cursor-pointer items-center gap-3 text-sm text-[#537089]">
+                  <span
+                    className={`inline-flex h-5 w-5 items-center justify-center rounded-[4px] border bg-white shadow-inner transition-colors ${pendingBrands.has(brand) ? 'border-[#0d4d8a] bg-[#0d4d8a]' : 'border-[#9fc3db]'}`}
+                    onClick={() => setPendingBrands(prev => {
+                      const next = new Set(prev);
+                      if (next.has(brand)) next.delete(brand); else next.add(brand);
+                      return next;
+                    })}
+                  >
+                    {pendingBrands.has(brand) && <svg className="h-3 w-3 text-white" fill="none" viewBox="0 0 12 12"><path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                  </span>
                   {brand}
                 </label>
               ))}
             </div>
-            <button className="mt-8 w-full rounded-[12px] bg-[linear-gradient(90deg,#0f5ca0_0%,#1a6fb0_100%)] px-5 py-4 text-sm font-black uppercase tracking-[0.08em] text-white shadow-[0_16px_30px_rgba(13,77,138,0.24)]">
+            <button
+              type="button"
+              onClick={() => {
+                setActiveBrands(pendingBrands);
+                setActiveMaxPrice(pendingMaxPrice);
+                setIsSidebarOpen(false);
+              }}
+              className="mt-8 w-full rounded-[12px] bg-[linear-gradient(90deg,#0f5ca0_0%,#1a6fb0_100%)] px-5 py-4 text-sm font-black uppercase tracking-[0.08em] text-white shadow-[0_16px_30px_rgba(13,77,138,0.24)]"
+            >
               Apply Filters
             </button>
           </div>
@@ -3803,10 +3836,11 @@ function Shop({ products, categories, isLoading, onAddToCart, onProductSelect }:
 
           {filteredProducts.length > 0 && (
             <div className="mt-12 flex max-w-[760px] justify-center items-center gap-2 text-[#5d7c93]">
-              <button className="p-2 transition-colors hover:text-[#0d4d8a]"><ChevronLeft size={20} /></button>
+              <button type="button" aria-label="Previous page" className="p-2 transition-colors hover:text-[#0d4d8a]"><ChevronLeft size={20} /></button>
               {[1, 2, 3].map((n) => (
                 <button
                   key={n}
+                  type="button"
                   className={`h-10 w-10 rounded-[10px] text-sm font-black transition-all ${
                     n === 1
                       ? 'bg-[#5fa8d7] text-white shadow-[0_10px_24px_rgba(95,168,215,0.25)]'
@@ -3817,8 +3851,8 @@ function Shop({ products, categories, isLoading, onAddToCart, onProductSelect }:
                 </button>
               ))}
               <span className="px-2 text-sm font-bold">...</span>
-              <button className="h-10 w-10 rounded-[10px] bg-white/70 text-sm font-black text-[#5d7c93] hover:bg-[#e6f2f9]">12</button>
-              <button className="p-2 transition-colors hover:text-[#0d4d8a]"><ChevronRight size={20} /></button>
+              <button type="button" className="h-10 w-10 rounded-[10px] bg-white/70 text-sm font-black text-[#5d7c93] hover:bg-[#e6f2f9]">12</button>
+              <button type="button" aria-label="Next page" className="p-2 transition-colors hover:text-[#0d4d8a]"><ChevronRight size={20} /></button>
             </div>
           )}
         </main>
