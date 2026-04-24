@@ -1,4 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { loadStripe } from '@stripe/stripe-js';
+import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
+
+const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY as string);
 import {
   ShoppingCart,
   User,
@@ -53,6 +57,7 @@ import {
   ApiError,
   type AuthResponse,
   type Category,
+  type CheckoutResponse,
   type Order,
   type ProductDetail,
   type ProductVariant,
@@ -70,6 +75,7 @@ import {
   listProductsRequest,
   listUserAddressesRequest,
   loginRequest,
+  refreshTokenRequest,
   registerRequest,
   removeCartItemRequest,
   setDefaultUserAddressRequest,
@@ -78,7 +84,7 @@ import {
   updateUserAddressRequest,
 } from './lib/api';
 
-type View = 'home' | 'shop' | 'support' | 'account' | 'orders' | 'cart' | 'shipping' | 'payment' | 'review' | 'confirmed' | 'tracking' | 'product' | 'notfound' | 'login' | 'signup' | 'forgot';
+type View = 'home' | 'shop' | 'support' | 'account' | 'orders' | 'cart' | 'shipping' | 'payment' | 'confirmed' | 'tracking' | 'product' | 'notfound' | 'login' | 'signup' | 'forgot';
 
 interface Product {
   id: string;
@@ -161,22 +167,19 @@ function CheckoutHeader({
   onClose,
   onBackToCart,
   onBackToShipping,
-  onBackToPayment,
   mode = 'checkout',
 }: {
-  activeStep: 'cart' | 'shipping' | 'payment' | 'review' | 'tracking';
+  activeStep: 'cart' | 'shipping' | 'payment' | 'tracking';
   onGoHome: () => void;
   onClose: () => void;
   onBackToCart?: () => void;
   onBackToShipping?: () => void;
-  onBackToPayment?: () => void;
   mode?: 'checkout' | 'tracking';
 }) {
   const checkoutSteps = [
     { id: 'cart', label: 'Cart', onClick: onBackToCart },
     { id: 'shipping', label: 'Shipping', onClick: onBackToShipping },
-    { id: 'payment', label: 'Payment', onClick: onBackToPayment },
-    { id: 'review', label: 'Review', onClick: undefined },
+    { id: 'payment', label: 'Payment', onClick: undefined },
   ] as const;
 
   return (
@@ -279,9 +282,8 @@ const getRouteSnapshotFromPath = (pathname: string): RouteSnapshot => {
     case '/checkout/shipping':
       return { view: 'shipping', productSlug: null, trackedOrderId: null };
     case '/checkout/payment':
-      return { view: 'payment', productSlug: null, trackedOrderId: null };
     case '/checkout/review':
-      return { view: 'review', productSlug: null, trackedOrderId: null };
+      return { view: 'payment', productSlug: null, trackedOrderId: null };
     case '/checkout/confirmed':
       return { view: 'confirmed', productSlug: null, trackedOrderId: null };
     case '/tracking':
@@ -329,8 +331,6 @@ const buildPathFromRoute = ({
       return '/checkout/shipping';
     case 'payment':
       return '/checkout/payment';
-    case 'review':
-      return '/checkout/review';
     case 'confirmed':
       return '/checkout/confirmed';
     case 'tracking':
@@ -388,7 +388,10 @@ export default function App() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [isLoadingProducts, setIsLoadingProducts] = useState(false);
   const [shippingMethod, setShippingMethod] = useState<'priority' | 'express'>('priority');
+  const [deliveryType, setDeliveryType] = useState<'home_delivery' | 'warehouse_pickup'>('home_delivery');
   const [checkoutShippingAddress, setCheckoutShippingAddress] = useState<CheckoutShippingAddress | null>(null);
+  const [checkoutResponse, setCheckoutResponse] = useState<CheckoutResponse | null>(null);
+  const [isInitiatingCheckout, setIsInitiatingCheckout] = useState(false);
   const [latestOrder, setLatestOrder] = useState<Order | null>(null);
   const [trackedOrderId, setTrackedOrderId] = useState<string | null>(initialRoute.trackedOrderId);
   const isAuthenticated = authSession !== null;
@@ -396,7 +399,7 @@ export default function App() {
 
   const cartCount = cartItems.reduce((total, item) => total + item.quantity, 0);
   const isCheckoutView =
-    view === 'cart' || view === 'shipping' || view === 'payment' || view === 'review' || view === 'confirmed' || view === 'tracking';
+    view === 'cart' || view === 'shipping' || view === 'payment' || view === 'confirmed' || view === 'tracking';
 
   const addToCart = async (productSlug: string, preferredVariantId?: string) => {
     if (!authSession?.access_token) {
@@ -649,6 +652,29 @@ export default function App() {
     window.localStorage.removeItem(AUTH_STORAGE_KEY);
   };
 
+  const callWithRefresh = async <T,>(fn: (token: string) => Promise<T>): Promise<T> => {
+    if (!authSession?.access_token) {
+      throw new ApiError('Not authenticated', 401);
+    }
+    try {
+      return await fn(authSession.access_token);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401 && authSession.refresh_token) {
+        try {
+          const newSession = await refreshTokenRequest(authSession.refresh_token);
+          persistSession(newSession);
+          return await fn(newSession.access_token);
+        } catch {
+          persistSession(null);
+          setAuthError('Your session has expired. Please sign in again.');
+          setView('login');
+          throw new ApiError('Session expired. Please sign in again.', 401);
+        }
+      }
+      throw error;
+    }
+  };
+
   const handleLogin = async (payload: { email: string; password: string }) => {
     setIsAuthSubmitting(true);
     setAuthError(null);
@@ -696,44 +722,66 @@ export default function App() {
     }
   };
 
-  const handlePlaceOrder = async () => {
-    if (!authSession?.access_token || !checkoutShippingAddress) {
-      setAuthError('Please complete your shipping information before placing the order.');
-      setView('shipping');
+  const handleProceedToPayment = async (address: CheckoutShippingAddress | null) => {
+    if (!authSession?.access_token) {
+      setAuthError('Please sign in before continuing to checkout.');
+      setView('login');
       return;
     }
 
     const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
-    const shippingAmount = shippingMethod === 'priority' ? 12 : 35;
+    const isWarehousePickup = deliveryType === 'warehouse_pickup';
+    const shippingAmount = isWarehousePickup ? 0 : (shippingMethod === 'priority' ? 12 : 35);
     const taxAmount = subtotal * 0.0825;
 
-    try {
-      setAuthError(null);
-      const result = await checkoutRequest(authSession.access_token, {
-        shipping_method: shippingMethod,
-        shipping_amount: shippingAmount,
-        tax_amount: taxAmount,
-        shipping_address: {
-          contact_name: `${checkoutShippingAddress.firstName} ${checkoutShippingAddress.lastName}`.trim(),
-          email: checkoutShippingAddress.email,
-          phone: checkoutShippingAddress.phone,
-          street: checkoutShippingAddress.street,
-          city: checkoutShippingAddress.city,
-          state: checkoutShippingAddress.state,
-          postal_code: checkoutShippingAddress.postalCode,
-          country: checkoutShippingAddress.country,
-        },
-      });
+    setIsInitiatingCheckout(true);
+    setAuthError(null);
+    if (address) setCheckoutShippingAddress(address);
 
-      const order = await getOrderRequest(authSession.access_token, result.order_id);
+    try {
+      const result = await callWithRefresh((token) =>
+        checkoutRequest(token, {
+          shipping_method: isWarehousePickup ? 'warehouse_pickup' : shippingMethod,
+          shipping_amount: shippingAmount,
+          tax_amount: taxAmount,
+          ...(isWarehousePickup || !address
+            ? {}
+            : {
+                shipping_address: {
+                  contact_name: `${address.firstName} ${address.lastName}`.trim(),
+                  email: address.email,
+                  phone: address.phone,
+                  street: address.street,
+                  city: address.city,
+                  state: address.state,
+                  postal_code: address.postalCode,
+                  country: address.country,
+                },
+              }),
+        })
+      );
+      setCheckoutResponse(result);
+      setView('payment');
+    } catch (error) {
+      if (!(error instanceof ApiError && error.status === 401)) {
+        setAuthError(error instanceof ApiError ? error.message : 'Unable to process your order right now.');
+      }
+    } finally {
+      setIsInitiatingCheckout(false);
+    }
+  };
+
+  const handlePaymentSuccess = async () => {
+    if (!authSession?.access_token || !checkoutResponse) return;
+    try {
+      const order = await getOrderRequest(authSession.access_token, checkoutResponse.order_id);
       setLatestOrder(order);
       setTrackedOrderId(order.id);
-      setCartItems([]);
-      setView('confirmed');
-    } catch (error) {
-      setAuthError(error instanceof ApiError ? error.message : 'Unable to place your order right now.');
-      setView('review');
+    } catch {
+      // best-effort — confirmed screen still shows without order details
     }
+    setCartItems([]);
+    setView('confirmed');
   };
 
   return (
@@ -910,30 +958,28 @@ export default function App() {
             onProductSelect={openProduct}
           />
         ) : view === 'payment' ? (
-          <PaymentView
-            key="payment"
-            cartItems={cartItems}
-            shippingMethod={shippingMethod}
-            onClose={() => setView('home')}
-            onGoHome={() => setView('home')}
-            onBackToShipping={() => requireAuthForView('shipping')}
-            onBackToCart={() => requireAuthForView('cart')}
-            onProceedToReview={() => requireAuthForView('review')}
-          />
-        ) : view === 'review' ? (
-          <ReviewView
-            key="review"
-            cartItems={cartItems}
-            checkoutShippingAddress={checkoutShippingAddress}
-            shippingMethod={shippingMethod}
-            errorMessage={authError}
-            onClose={() => setView('home')}
-            onGoHome={() => setView('home')}
-            onBackToPayment={() => requireAuthForView('payment')}
-            onBackToShipping={() => requireAuthForView('shipping')}
-            onBackToCart={() => requireAuthForView('cart')}
-            onPlaceOrder={handlePlaceOrder}
-          />
+          checkoutResponse ? (
+            <Elements
+              key="payment"
+              stripe={stripePromise}
+              options={{ clientSecret: checkoutResponse.client_secret, appearance: { theme: 'stripe' } }}
+            >
+              <PaymentView
+                cartItems={cartItems}
+                checkoutShippingAddress={checkoutShippingAddress}
+                shippingMethod={shippingMethod}
+                deliveryType={deliveryType}
+                onClose={() => setView('home')}
+                onGoHome={() => setView('home')}
+                onBackToShipping={() => {
+                  setCheckoutResponse(null);
+                  requireAuthForView('shipping');
+                }}
+                onBackToCart={() => requireAuthForView('cart')}
+                onPaymentSuccess={handlePaymentSuccess}
+              />
+            </Elements>
+          ) : null
         ) : view === 'tracking' ? (
           <TrackOrderView
             key="tracking"
@@ -970,12 +1016,16 @@ export default function App() {
             cartItems={cartItems}
             checkoutShippingAddress={checkoutShippingAddress}
             shippingMethod={shippingMethod}
+            deliveryType={deliveryType}
+            isLoading={isInitiatingCheckout}
             onShippingAddressChange={setCheckoutShippingAddress}
             onShippingMethodChange={setShippingMethod}
+            onDeliveryTypeChange={setDeliveryType}
             onClose={() => setView('home')}
             onGoHome={() => setView('home')}
             onBackToCart={() => requireAuthForView('cart')}
-            onProceedToPayment={() => requireAuthForView('payment')}
+            onGoToAccount={() => setView('account')}
+            onProceedToPayment={handleProceedToPayment}
           />
         ) : view === 'cart' ? (
           <ShoppingBagView
@@ -1034,6 +1084,7 @@ export default function App() {
             onExit={() => setView('home')}
             onOpenOrders={() => setView('orders')}
             onSessionUpdate={persistSession}
+            callWithRefresh={callWithRefresh}
           />
         ) : (
           <Support key="support" />
@@ -1316,26 +1367,35 @@ function ShippingView({
   cartItems,
   checkoutShippingAddress,
   shippingMethod,
+  deliveryType,
+  isLoading = false,
   onShippingAddressChange,
   onShippingMethodChange,
+  onDeliveryTypeChange,
   onClose,
   onGoHome,
   onBackToCart,
+  onGoToAccount,
   onProceedToPayment,
 }: {
   authSession: AuthSession;
   cartItems: CartItem[];
   checkoutShippingAddress: CheckoutShippingAddress | null;
   shippingMethod: 'priority' | 'express';
+  deliveryType: 'home_delivery' | 'warehouse_pickup';
+  isLoading?: boolean;
   onShippingAddressChange: (address: CheckoutShippingAddress) => void;
   onShippingMethodChange: (method: 'priority' | 'express') => void;
+  onDeliveryTypeChange: (type: 'home_delivery' | 'warehouse_pickup') => void;
   onClose: () => void;
   onGoHome: () => void;
   onBackToCart: () => void;
-  onProceedToPayment: () => void;
+  onGoToAccount: () => void;
+  onProceedToPayment: (address: CheckoutShippingAddress | null) => void;
   key?: string;
 }) {
-  const shippingCost = shippingMethod === 'priority' ? 12 : 35;
+  const isWarehousePickup = deliveryType === 'warehouse_pickup';
+  const shippingCost = isWarehousePickup ? 0 : (shippingMethod === 'priority' ? 12 : 35);
   const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const tax = subtotal * 0.08;
   const total = subtotal + shippingCost + tax;
@@ -1468,9 +1528,70 @@ function ShippingView({
             </div>
 
             <form className="space-y-14">
+              {/* Delivery Type Selector */}
               <div>
                 <div className="mb-8 flex items-center gap-4">
-                  <span className="inline-flex h-8 min-w-8 items-center justify-center rounded-lg bg-[linear-gradient(180deg,#7eb7db_0%,#9bc8e2_100%)] px-2 text-xs font-black text-white shadow-[0_8px_18px_rgba(107,154,187,0.16)]">0</span>
+                  <span className="inline-flex h-8 min-w-8 items-center justify-center rounded-lg bg-[linear-gradient(180deg,#7eb7db_0%,#9bc8e2_100%)] px-2 text-xs font-black text-white shadow-[0_8px_18px_rgba(107,154,187,0.16)]">1</span>
+                  <h2 className="text-[30px] font-black tracking-[-0.04em] text-[#1f6dad]">Delivery Type</h2>
+                </div>
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={() => onDeliveryTypeChange('home_delivery')}
+                    className={`rounded-[18px] border p-6 text-left shadow-[0_12px_28px_rgba(107,154,187,0.12)] transition-all ${
+                      deliveryType === 'home_delivery'
+                        ? 'border-[#7eb7db] bg-[linear-gradient(90deg,#0f66a6_0%,#2c73aa_100%)] text-white'
+                        : 'border-[#d6e4ec] bg-[linear-gradient(90deg,#bfdcf0_0%,#d1e7f5_100%)] text-[#1f6dad]'
+                    }`}
+                  >
+                    <div className="flex items-center gap-4">
+                      <Truck size={28} className="shrink-0" />
+                      <div>
+                        <div className="text-2xl font-black tracking-[-0.04em]">Home Delivery</div>
+                        <div className={`mt-1 text-sm ${deliveryType === 'home_delivery' ? 'text-white/80' : 'text-[#5d95bc]'}`}>Delivered to your address</div>
+                      </div>
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onDeliveryTypeChange('warehouse_pickup')}
+                    className={`rounded-[18px] border p-6 text-left shadow-[0_12px_28px_rgba(107,154,187,0.12)] transition-all ${
+                      deliveryType === 'warehouse_pickup'
+                        ? 'border-[#7eb7db] bg-[linear-gradient(90deg,#0f66a6_0%,#2c73aa_100%)] text-white'
+                        : 'border-[#d6e4ec] bg-[linear-gradient(90deg,#bfdcf0_0%,#d1e7f5_100%)] text-[#1f6dad]'
+                    }`}
+                  >
+                    <div className="flex items-center gap-4">
+                      <Package size={28} className="shrink-0" />
+                      <div>
+                        <div className="text-2xl font-black tracking-[-0.04em]">Warehouse Pickup</div>
+                        <div className={`mt-1 text-sm ${deliveryType === 'warehouse_pickup' ? 'text-white/80' : 'text-[#5d95bc]'}`}>Pick up at our facility · Free</div>
+                      </div>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {isWarehousePickup ? (
+                <div className="rounded-[18px] border border-[#d6e4ec] bg-white p-8 shadow-[0_12px_28px_rgba(107,154,187,0.12)]">
+                  <div className="flex items-center gap-4 mb-4">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#eaf6ff]">
+                      <Package size={22} className="text-[#1f6dad]" />
+                    </div>
+                    <div>
+                      <div className="text-xl font-black text-[#1f6dad]">Warehouse Pickup Selected</div>
+                      <div className="text-sm text-[#5d95bc] mt-0.5">No shipping costs apply</div>
+                    </div>
+                  </div>
+                  <p className="text-[#5d95bc] text-sm leading-relaxed">
+                    Your order will be prepared at our warehouse. We'll contact you with the exact pickup location and schedule once your order is confirmed.
+                  </p>
+                </div>
+              ) : (
+                <>
+              <div>
+                <div className="mb-8 flex items-center gap-4">
+                  <span className="inline-flex h-8 min-w-8 items-center justify-center rounded-lg bg-[linear-gradient(180deg,#7eb7db_0%,#9bc8e2_100%)] px-2 text-xs font-black text-white shadow-[0_8px_18px_rgba(107,154,187,0.16)]">2</span>
                   <h2 className="text-[30px] font-black tracking-[-0.04em] text-[#1f6dad]">Saved Addresses</h2>
                 </div>
                 {addressError ? (
@@ -1509,15 +1630,23 @@ function ShippingView({
                     ))}
                   </div>
                 ) : (
-                  <div className="rounded-[18px] border border-[#d6e4ec] bg-white p-6 text-[#5d95bc] shadow-[0_12px_28px_rgba(107,154,187,0.12)]">
-                    No saved addresses found. You can still enter shipping details manually or add addresses from My Account.
+                  <div className="rounded-[18px] border border-[#d6e4ec] bg-white p-6 shadow-[0_12px_28px_rgba(107,154,187,0.12)]">
+                    <p className="text-[#5d95bc] mb-4">You don't have any saved delivery contacts yet. Add one from your account to speed up checkout, or fill in the address manually below.</p>
+                    <button
+                      type="button"
+                      onClick={onGoToAccount}
+                      className="inline-flex items-center gap-2 rounded-xl bg-[#1a3f6f] px-5 py-3 text-sm font-bold text-white shadow-[0_4px_14px_rgba(26,63,111,0.2)] transition-all hover:bg-[#15345c]"
+                    >
+                      <MapPin size={14} />
+                      Add Delivery Contact
+                    </button>
                   </div>
                 )}
               </div>
 
               <div>
                 <div className="mb-8 flex items-center gap-4">
-                  <span className="inline-flex h-8 min-w-8 items-center justify-center rounded-lg bg-[linear-gradient(180deg,#7eb7db_0%,#9bc8e2_100%)] px-2 text-xs font-black text-white shadow-[0_8px_18px_rgba(107,154,187,0.16)]">1</span>
+                  <span className="inline-flex h-8 min-w-8 items-center justify-center rounded-lg bg-[linear-gradient(180deg,#7eb7db_0%,#9bc8e2_100%)] px-2 text-xs font-black text-white shadow-[0_8px_18px_rgba(107,154,187,0.16)]">3</span>
                   <h2 className="text-[30px] font-black tracking-[-0.04em] text-[#1f6dad]">Contact Information</h2>
                 </div>
                 <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
@@ -1546,7 +1675,7 @@ function ShippingView({
 
               <div>
                 <div className="mb-8 flex items-center gap-4">
-                  <span className="inline-flex h-8 min-w-8 items-center justify-center rounded-lg bg-[linear-gradient(180deg,#7eb7db_0%,#9bc8e2_100%)] px-2 text-xs font-black text-white shadow-[0_8px_18px_rgba(107,154,187,0.16)]">2</span>
+                  <span className="inline-flex h-8 min-w-8 items-center justify-center rounded-lg bg-[linear-gradient(180deg,#7eb7db_0%,#9bc8e2_100%)] px-2 text-xs font-black text-white shadow-[0_8px_18px_rgba(107,154,187,0.16)]">4</span>
                   <h2 className="text-[30px] font-black tracking-[-0.04em] text-[#1f6dad]">Destination Details</h2>
                 </div>
                 <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
@@ -1614,8 +1743,8 @@ function ShippingView({
 
               <div>
                 <div className="mb-8 flex items-center gap-4">
-                  <span className="inline-flex h-8 min-w-8 items-center justify-center rounded-lg bg-[linear-gradient(180deg,#7eb7db_0%,#9bc8e2_100%)] px-2 text-xs font-black text-white shadow-[0_8px_18px_rgba(107,154,187,0.16)]">3</span>
-                  <h2 className="text-[30px] font-black tracking-[-0.04em] text-[#1f6dad]">Delivery Method</h2>
+                  <span className="inline-flex h-8 min-w-8 items-center justify-center rounded-lg bg-[linear-gradient(180deg,#7eb7db_0%,#9bc8e2_100%)] px-2 text-xs font-black text-white shadow-[0_8px_18px_rgba(107,154,187,0.16)]">5</span>
+                  <h2 className="text-[30px] font-black tracking-[-0.04em] text-[#1f6dad]">Delivery Speed</h2>
                 </div>
                 <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                   <button
@@ -1654,6 +1783,8 @@ function ShippingView({
                   </button>
                 </div>
               </div>
+                </>
+              )}
 
               <div className="flex flex-col gap-4 sm:flex-row">
                 <button
@@ -1665,13 +1796,11 @@ function ShippingView({
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
-                    onShippingAddressChange(shippingForm);
-                    onProceedToPayment();
-                  }}
-                  className="rounded-[16px] bg-[linear-gradient(90deg,#0f5ca0_0%,#1d6ea9_100%)] px-10 py-5 text-[20px] font-black text-white shadow-[0_16px_30px_rgba(13,77,138,0.24)] transition-transform hover:scale-[1.01]"
+                  disabled={isLoading}
+                  onClick={() => onProceedToPayment(isWarehousePickup ? null : shippingForm)}
+                  className="rounded-[16px] bg-[linear-gradient(90deg,#0f5ca0_0%,#1d6ea9_100%)] px-10 py-5 text-[20px] font-black text-white shadow-[0_16px_30px_rgba(13,77,138,0.24)] transition-transform hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100"
                 >
-                  Proceed to Payment
+                  {isLoading ? 'Preparing Order…' : 'Proceed to Payment'}
                 </button>
               </div>
             </form>
@@ -1761,32 +1890,106 @@ function ShippingView({
   );
 }
 
+
+function StripePaymentForm({ total, onPaymentSuccess }: { total: number; onPaymentSuccess: () => Promise<void> }) {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [stripeError, setStripeError] = useState<string | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!stripe || !elements) return;
+
+    setIsSubmitting(true);
+    setStripeError(null);
+
+    const { error } = await stripe.confirmPayment({
+      elements,
+      confirmParams: {
+        return_url: `${window.location.origin}/checkout/confirmed`,
+      },
+      redirect: 'if_required',
+    });
+
+    if (error) {
+      setStripeError(error.message ?? 'Payment failed. Please try again.');
+      setIsSubmitting(false);
+      return;
+    }
+
+    await onPaymentSuccess();
+    setIsSubmitting(false);
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-6">
+      <div className="rounded-[18px] border border-[#c8dff0] bg-white p-6 shadow-[0_8px_24px_rgba(107,154,187,0.10)]">
+        <p className="mb-5 text-[13px] font-black uppercase tracking-[0.08em] text-[#5c95bd]">Card Details</p>
+        <PaymentElement options={{ layout: 'tabs' }} />
+      </div>
+
+      {stripeError && (
+        <div className="rounded-[14px] border border-red-300 bg-red-50 px-5 py-4 text-[15px] text-red-700">
+          {stripeError}
+        </div>
+      )}
+
+      <button
+        type="submit"
+        disabled={!stripe || isSubmitting}
+        className="w-full rounded-[16px] bg-[linear-gradient(90deg,#0f5ca0_0%,#1d6ea9_100%)] px-8 py-5 text-[20px] font-black uppercase tracking-[0.06em] text-white shadow-[0_16px_30px_rgba(13,77,138,0.24)] transition-all hover:scale-[1.01] disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:scale-100"
+      >
+        {isSubmitting ? 'Processing…' : `Pay ${formatCurrency(total)}`}
+      </button>
+
+      <p className="text-center text-[12px] font-black uppercase tracking-[0.06em] text-[#5d95bc]">
+        By clicking, you agree to Havtel's Terms of Service and Privacy Policy.
+      </p>
+
+      <div className="rounded-[14px] bg-[linear-gradient(90deg,#bfdcf0_0%,#d1e7f5_100%)] p-5">
+        <div className="flex items-start gap-3">
+          <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-white text-[#1f6dad] shadow-[0_10px_20px_rgba(107,154,187,0.12)]">
+            <ShieldCheck size={16} />
+          </div>
+          <p className="text-[15px] leading-relaxed text-white">
+            Secure checkout with AES-256 encryption. Your payment information is never stored on our servers.
+          </p>
+        </div>
+      </div>
+    </form>
+  );
+}
+
 function PaymentView({
   cartItems,
+  checkoutShippingAddress,
   shippingMethod,
+  deliveryType,
   onClose,
   onGoHome,
   onBackToShipping,
   onBackToCart,
-  onProceedToReview,
+  onPaymentSuccess,
 }: {
   cartItems: CartItem[];
+  checkoutShippingAddress: CheckoutShippingAddress | null;
   shippingMethod: 'priority' | 'express';
+  deliveryType: 'home_delivery' | 'warehouse_pickup';
   onClose: () => void;
   onGoHome: () => void;
   onBackToShipping: () => void;
   onBackToCart: () => void;
-  onProceedToReview: () => void;
+  onPaymentSuccess: () => Promise<void>;
   key?: string;
 }) {
-  const [paymentMethod, setPaymentMethod] = useState<'card' | 'paypal'>('card');
-  const [saveCard, setSaveCard] = useState(true);
-  const shippingCost = shippingMethod === 'priority' ? 12 : 35;
-  const shippingLabel = shippingMethod === 'priority' ? 'Priority Tech-Ship' : 'Quantum Express';
+  const isWarehousePickup = deliveryType === 'warehouse_pickup';
+  const shippingCost = isWarehousePickup ? 0 : (shippingMethod === 'priority' ? 12 : 35);
+  const shippingLabel = isWarehousePickup ? 'WAREHOUSE PICKUP (FREE)' : (shippingMethod === 'priority' ? 'STANDARD EXPRESS (2-3 BUSINESS DAYS)' : 'QUANTUM EXPRESS (NEXT DAY)');
   const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const tax = subtotal * 0.08;
+  const tax = subtotal * 0.0825;
   const total = subtotal + shippingCost + tax;
-  const summaryItem = cartItems[0] ?? null;
+  const shippingName = [checkoutShippingAddress?.firstName, checkoutShippingAddress?.lastName].filter(Boolean).join(' ').trim();
 
   return (
     <motion.div
@@ -1804,253 +2007,12 @@ function PaymentView({
       />
 
       <main className="mx-auto max-w-[1600px] px-8 py-14 md:px-16">
-        <div className="grid grid-cols-1 gap-10 xl:grid-cols-[minmax(0,1fr)_430px]">
-          <section className="space-y-10">
-            <div>
-              <h1 className="text-5xl font-black uppercase tracking-[-0.08em] text-[#1f6dad] md:text-[82px] md:leading-[0.95]">Payment Method</h1>
-              <p className="mt-5 max-w-3xl text-[22px] italic leading-relaxed text-[#5d95bc]">
-                Select your preferred way to complete the acquisition.
-              </p>
-            </div>
-
-            <div className="inline-flex rounded-[18px] bg-[linear-gradient(90deg,#bfdcf0_0%,#d1e7f5_100%)] p-2 shadow-[0_12px_28px_rgba(107,154,187,0.12)]">
-              <button
-                type="button"
-                onClick={() => setPaymentMethod('card')}
-                className={`inline-flex items-center gap-3 rounded-[14px] px-10 py-5 text-[20px] font-black transition-all ${
-                  paymentMethod === 'card'
-                    ? 'bg-[linear-gradient(90deg,#6eaed4_0%,#78b5da_100%)] text-white shadow-[0_10px_24px_rgba(107,154,187,0.16)]'
-                    : 'text-[#1f6dad] hover:text-[#0f5ca0]'
-                }`}
-              >
-                <CreditCard size={22} />
-                Credit Card
-              </button>
-              <button
-                type="button"
-                onClick={() => setPaymentMethod('paypal')}
-                className={`inline-flex items-center gap-3 rounded-[14px] px-10 py-5 text-[20px] font-black transition-all ${
-                  paymentMethod === 'paypal'
-                    ? 'bg-[linear-gradient(90deg,#6eaed4_0%,#78b5da_100%)] text-white shadow-[0_10px_24px_rgba(107,154,187,0.16)]'
-                    : 'text-[#1f6dad] hover:text-[#0f5ca0]'
-                }`}
-              >
-                <Wallet size={22} />
-                PayPal
-              </button>
-            </div>
-
-            <div className="rounded-[22px] bg-[linear-gradient(90deg,#6eaed4_0%,#78b5da_100%)] p-8 text-white shadow-[0_16px_34px_rgba(107,154,187,0.2)] md:p-10">
-              <div className="grid grid-cols-1 gap-8">
-                <label className="block">
-                  <span className="mb-4 block text-[13px] font-black uppercase tracking-[0.08em] text-white">Cardholder Name</span>
-                  <input
-                    type="text"
-                    placeholder="ALEXANDER VANCE"
-                    className="w-full rounded-[14px] border border-[#2c73aa] bg-[linear-gradient(90deg,#0f5ca0_0%,#2c73aa_100%)] px-7 py-5 text-[22px] text-white placeholder:text-white/90 shadow-[0_10px_24px_rgba(14,67,108,0.2)] focus:outline-none"
-                  />
-                </label>
-
-                <label className="block">
-                  <span className="mb-4 block text-[13px] font-black uppercase tracking-[0.08em] text-white">Card Number</span>
-                  <div className="flex items-center rounded-[14px] border border-[#2c73aa] bg-[linear-gradient(90deg,#0f5ca0_0%,#2c73aa_100%)] px-7 py-5 shadow-[0_10px_24px_rgba(14,67,108,0.2)]">
-                    <input
-                      type="text"
-                      placeholder="0000 0000 0000 0000"
-                      className="w-full bg-transparent text-[22px] text-white placeholder:text-white/90 focus:outline-none"
-                    />
-                    <CreditCard size={24} className="text-white/80" />
-                  </div>
-                </label>
-
-                <div className="grid grid-cols-1 gap-8 md:grid-cols-2">
-                  <label className="block">
-                    <span className="mb-4 block text-[13px] font-black uppercase tracking-[0.08em] text-white">Expiry Date</span>
-                    <input
-                      type="text"
-                      placeholder="alejandrobarrera99@gmail.com"
-                      className="w-full rounded-[14px] border border-[#d6e4ec] bg-white px-7 py-5 text-[22px] text-[#1f5078] placeholder:text-[#1f5078] shadow-[0_10px_24px_rgba(107,154,187,0.12)] focus:outline-none"
-                    />
-                  </label>
-                  <label className="block">
-                    <span className="mb-4 block text-[13px] font-black uppercase tracking-[0.08em] text-white">CVV</span>
-                    <input
-                      type="password"
-                      placeholder="•••••••••"
-                      className="w-full rounded-[14px] border border-[#d6e4ec] bg-white px-7 py-5 text-[22px] text-[#1f5078] placeholder:text-[#1f5078] shadow-[0_10px_24px_rgba(107,154,187,0.12)] focus:outline-none"
-                    />
-                  </label>
-                </div>
-
-                <label className="inline-flex items-center gap-4 pt-2 text-[18px] font-black text-white">
-                  <button
-                    type="button"
-                    onClick={() => setSaveCard((prev) => !prev)}
-                    className={`flex h-8 w-8 items-center justify-center rounded-[8px] border transition-colors ${
-                      saveCard ? 'border-white/40 bg-[#2c73aa] text-white' : 'border-white/30 bg-white/10 text-transparent'
-                    }`}
-                  >
-                    <span className="text-base">✓</span>
-                  </button>
-                  Save this card for future high-speed transactions
-                </label>
-              </div>
-            </div>
-
-            <div className="rounded-[22px] bg-[linear-gradient(90deg,#bfdcf0_0%,#d1e7f5_100%)] p-8 shadow-[0_16px_30px_rgba(107,154,187,0.12)]">
-              <div className="flex items-center gap-5">
-                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[#0f5ca0] text-white">
-                  <Lock size={30} />
-                </div>
-                <div>
-                  <div className="text-[22px] font-black text-white">Secure Encryption Active</div>
-                  <div className="mt-2 text-[18px] text-white/90">
-                    Your financial data is processed via 256-bit AES military-grade encryption.
-                  </div>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <aside className="space-y-8">
-            <div className="rounded-[22px] border-[5px] border-[#7eb7db] bg-[rgba(255,250,241,0.92)] p-8 shadow-[0_16px_34px_rgba(107,154,187,0.16)]">
-              <h2 className="mb-10 text-[56px] font-black tracking-[-0.06em] text-[#1f6dad]">Order Manifest</h2>
-              {summaryItem && (
-                <>
-                  <div className="flex gap-5">
-                    <div className="h-28 w-28 overflow-hidden rounded-[12px] bg-[linear-gradient(180deg,#8ec4e3_0%,#7db8dd_100%)]">
-                      {summaryItem.img ? <img src={summaryItem.img} alt={summaryItem.productName} className="h-full w-full object-contain p-2" referrerPolicy="no-referrer" /> : null}
-                    </div>
-                    <div>
-                      <h3 className="text-[22px] font-black tracking-[-0.04em] text-[#1f6dad]">{summaryItem.productName}</h3>
-                      <p className="mt-2 text-[18px] italic text-[#5d95bc]">{summaryItem.variantName}</p>
-                      <p className="mt-3 text-[22px] font-black text-[#1f6dad]">{formatCurrency(summaryItem.price * summaryItem.quantity)}</p>
-                    </div>
-                  </div>
-                  <div className="my-8 border-t border-[#7eb7db]"></div>
-                </>
-              )}
-
-              <div className="space-y-5 text-xl">
-                <div className="flex items-center justify-between">
-                  <span className="text-[14px] font-black uppercase tracking-[0.08em] text-[#5c95bd]">Subtotal</span>
-                  <span className="font-black text-[#1f6dad]">{formatCurrency(subtotal)}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-[14px] font-black uppercase tracking-[0.08em] text-[#5c95bd]">Shipping</span>
-                  <span className="font-black text-[#1f6dad]">{formatCurrency(shippingCost)}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-[14px] font-black uppercase tracking-[0.08em] text-[#5c95bd]">Estimated Tax</span>
-                  <span className="font-black text-[#1f6dad]">{formatCurrency(tax)}</span>
-                </div>
-              </div>
-
-              <div className="my-8 border-t border-[#7eb7db]"></div>
-
-              <div className="flex items-end justify-between gap-4">
-                <span className="text-[20px] font-black uppercase tracking-[0.06em] text-[#5c95bd]">Total Amount</span>
-                <span className="text-[72px] font-black tracking-[-0.08em] leading-none text-[#1f6dad]">{formatCurrency(total)}</span>
-              </div>
-
-              <button
-                type="button"
-                onClick={onProceedToReview}
-                className="mt-10 w-full rounded-[16px] bg-[linear-gradient(90deg,#0f5ca0_0%,#1d6ea9_100%)] px-8 py-6 text-[20px] font-black text-white shadow-[0_16px_30px_rgba(13,77,138,0.24)] transition-transform hover:scale-[1.01]"
-              >
-                Confirm Acquisition →
-              </button>
-
-              <p className="mt-8 text-center text-[12px] font-black uppercase tracking-[0.06em] text-[#1f6dad]">
-                By clicking, you agree to the Havtel protocols
-              </p>
-            </div>
-
-            <div className="rounded-[18px] bg-[linear-gradient(90deg,#bfdcf0_0%,#d1e7f5_100%)] p-7 shadow-[0_16px_30px_rgba(107,154,187,0.12)]">
-              <div className="flex items-center justify-between gap-5">
-                <div className="flex items-center gap-4">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white text-[#1f6dad] shadow-[0_10px_20px_rgba(107,154,187,0.12)]">
-                    <BadgePercent size={22} />
-                  </div>
-                  <span className="text-[20px] font-black text-white">Apply Protocol Code</span>
-                </div>
-                <button type="button" className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-[#1f6dad] text-2xl shadow-[0_10px_20px_rgba(107,154,187,0.12)]">
-                  +
-                </button>
-              </div>
-            </div>
-          </aside>
-        </div>
-      </main>
-
-      <footer className="bg-[#1a3f6f] px-8 py-10 text-sm uppercase tracking-[0.16em] text-white/65 md:px-16">
-        <div className="mx-auto flex max-w-[1600px] flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>© 2026 HAVTEL CORP. All Rights Reserved</div>
-          <div className="flex flex-wrap gap-6">
-            <span>Privacy Policy</span>
-            <span>Terms of Service</span>
-            <span>Help Center</span>
-          </div>
-        </div>
-      </footer>
-    </motion.div>
-  );
-}
-
-function ReviewView({
-  cartItems,
-  checkoutShippingAddress,
-  shippingMethod,
-  errorMessage,
-  onClose,
-  onGoHome,
-  onBackToPayment,
-  onBackToShipping,
-  onBackToCart,
-  onPlaceOrder,
-}: {
-  cartItems: CartItem[];
-  checkoutShippingAddress: CheckoutShippingAddress | null;
-  shippingMethod: 'priority' | 'express';
-  errorMessage: string | null;
-  onClose: () => void;
-  onGoHome: () => void;
-  onBackToPayment: () => void;
-  onBackToShipping: () => void;
-  onBackToCart: () => void;
-  onPlaceOrder: () => void;
-  key?: string;
-}) {
-  const shippingCost = shippingMethod === 'priority' ? 12 : 35;
-  const shippingLabel = shippingMethod === 'priority' ? 'STANDARD EXPRESS (2-3 BUSINESS DAYS)' : 'QUANTUM EXPRESS (NEXT DAY)';
-  const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const tax = subtotal * 0.0825;
-  const total = subtotal + shippingCost + tax;
-  const shippingName = [checkoutShippingAddress?.firstName, checkoutShippingAddress?.lastName].filter(Boolean).join(' ').trim();
-
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="min-h-screen bg-[linear-gradient(90deg,#ffffff_0%,#fbf7f4_72%,#fff6df_100%)] text-[#1a3f6f]"
-    >
-      <CheckoutHeader
-        activeStep="review"
-        onGoHome={onGoHome}
-        onClose={onClose}
-        onBackToCart={onBackToCart}
-        onBackToShipping={onBackToShipping}
-        onBackToPayment={onBackToPayment}
-      />
-
-      <main className="mx-auto max-w-[1600px] px-8 py-14 md:px-16">
         <div className="grid grid-cols-1 gap-10 xl:grid-cols-[minmax(0,1fr)_380px]">
           <section>
             <div className="mb-10 max-w-4xl">
-              <h1 className="text-5xl font-black uppercase tracking-[-0.08em] text-[#1f6dad] md:text-[82px] md:leading-[0.95]">Review Your Order</h1>
+              <h1 className="text-5xl font-black uppercase tracking-[-0.08em] text-[#1f6dad] md:text-[82px] md:leading-[0.95]">Payment</h1>
               <p className="mt-4 max-w-4xl text-[22px] italic leading-relaxed text-[#5d95bc]">
-                Please verify your details before confirming your purchase. Once placed, your items will be prepared for immediate dispatch.
+                Review your order and complete your purchase securely with Stripe.
               </p>
             </div>
 
@@ -2058,12 +2020,6 @@ function ReviewView({
               <span className="text-[13px] font-black uppercase tracking-[0.08em] text-[#5c95bd]">Items in Shipment</span>
               <button type="button" onClick={onBackToCart} className="text-[13px] font-black uppercase tracking-[0.08em] text-[#1f6dad] hover:underline">Edit Cart</button>
             </div>
-
-            {errorMessage ? (
-              <div className="mb-6 rounded-[16px] border border-red-300 bg-red-50 px-5 py-4 text-[15px] text-red-700 shadow-[0_10px_24px_rgba(220,38,38,0.08)]">
-                {errorMessage}
-              </div>
-            ) : null}
 
             <div className="space-y-5">
               {cartItems.map((item) => {
@@ -2123,25 +2079,6 @@ function ReviewView({
                 </div>
               </div>
 
-              <div className="rounded-[18px] bg-[linear-gradient(90deg,#bfdcf0_0%,#d1e7f5_100%)] p-7 shadow-[0_16px_30px_rgba(107,154,187,0.12)]">
-                <div className="mb-6 flex items-center justify-between">
-                  <span className="text-[13px] font-black uppercase tracking-[0.08em] text-[#5c95bd]">Payment Method</span>
-                  <button type="button" onClick={onBackToPayment} className="text-[13px] font-black text-[#1f6dad] hover:underline">Edit</button>
-                </div>
-                <div className="flex items-center gap-4">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-[10px] bg-white text-[#1f6dad] shadow-[0_10px_20px_rgba(107,154,187,0.12)]">
-                    <CreditCard size={22} />
-                  </div>
-                  <div>
-                    <div className="text-[22px] font-black text-white">Visa ending in 8842</div>
-                    <div className="text-[18px] text-white/90">Expires 12/26</div>
-                  </div>
-                </div>
-                <div className="mt-6 border-t border-[#7eb7db] pt-5">
-                  <div className="text-[13px] font-black uppercase tracking-[0.08em] text-[#5c95bd]">Billing Address</div>
-                  <div className="mt-1 text-[16px] font-black text-[#1f6dad]">Same as shipping adress</div>
-                </div>
-              </div>
             </div>
           </section>
 
@@ -2157,25 +2094,8 @@ function ReviewView({
               <span className="text-[20px] font-black uppercase tracking-[0.06em] text-[#5c95bd]">Total</span>
               <span className="text-[64px] font-black tracking-[-0.08em] leading-none text-[#1f6dad]">{formatCurrency(total)}</span>
             </div>
-            <button
-              type="button"
-              onClick={onPlaceOrder}
-              className="mt-8 w-full rounded-[16px] bg-[linear-gradient(90deg,#0f5ca0_0%,#1d6ea9_100%)] px-8 py-5 text-[20px] font-black uppercase tracking-[0.06em] text-white shadow-[0_16px_30px_rgba(13,77,138,0.24)] transition-all hover:scale-[1.01]"
-            >
-              Place Your Order
-            </button>
-            <p className="mt-5 text-[16px] italic leading-relaxed text-[#5d95bc]">
-              By clicking "Place Your Order", you agree to Havtel's Termes of Service and Privacy Policy.
-            </p>
-            <div className="mt-5 rounded-[16px] bg-[linear-gradient(90deg,#bfdcf0_0%,#d1e7f5_100%)] p-5">
-              <div className="flex items-start gap-3">
-                <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-white text-[#1f6dad] shadow-[0_10px_20px_rgba(107,154,187,0.12)]">
-                  <ShieldCheck size={16} />
-                </div>
-                <p className="text-[15px] leading-relaxed text-white">
-                  Secure checkout with AES-256 encryption. Your payment information is never stored on our servers.
-                </p>
-              </div>
+            <div className="mt-8">
+              <StripePaymentForm total={total} onPaymentSuccess={onPaymentSuccess} />
             </div>
           </aside>
         </div>
@@ -2235,7 +2155,7 @@ function OrderConfirmedView({
       className="min-h-screen bg-[radial-gradient(circle_at_bottom_right,rgba(24,98,126,0.22),transparent_28%),#0f141b] text-slate-100"
     >
       <CheckoutHeader
-        activeStep="review"
+        activeStep="payment"
         onGoHome={onGoHome}
         onClose={onClose}
       />
@@ -3867,11 +3787,13 @@ function Account({
   onExit,
   onOpenOrders,
   onSessionUpdate,
+  callWithRefresh,
 }: {
   authSession: AuthSession;
   onExit: () => void;
   onOpenOrders: () => void;
   onSessionUpdate: (session: AuthResponse | null) => void;
+  callWithRefresh: <T,>(fn: (token: string) => Promise<T>) => Promise<T>;
   key?: string;
 }) {
   const [selectedSection, setSelectedSection] = useState<string | null>(null);
@@ -4245,12 +4167,17 @@ function Account({
                         };
 
                         if (editingContactId !== null) {
-                          const updated = await updateUserAddressRequest(authSession.access_token, editingContactId, payload);
+                          const contactId = editingContactId;
+                          const updated = await callWithRefresh((token) =>
+                            updateUserAddressRequest(token, contactId, payload)
+                          );
                           setDeliveryContacts((prev) =>
                             prev.map((contact) => (contact.id === updated.id ? updated : contact))
                           );
                         } else {
-                          const created = await createUserAddressRequest(authSession.access_token, payload);
+                          const created = await callWithRefresh((token) =>
+                            createUserAddressRequest(token, payload)
+                          );
                           setDeliveryContacts((prev) => {
                             const next = [...prev, created];
                             return next.sort((a, b) => Number(b.is_default) - Number(a.is_default));
@@ -4259,7 +4186,9 @@ function Account({
 
                         resetDeliveryForm();
                       } catch (error) {
-                        setDeliveryError(error instanceof ApiError ? error.message : 'Unable to save this delivery contact right now.');
+                        if (!(error instanceof ApiError && error.status === 401)) {
+                          setDeliveryError(error instanceof ApiError ? error.message : 'Unable to save this delivery contact right now.');
+                        }
                       } finally {
                         setIsSavingAddress(false);
                       }
@@ -4510,11 +4439,14 @@ function Account({
                               return;
                             }
 
+                            const contactId = contact.id;
                             try {
-                              await deleteUserAddressRequest(authSession.access_token, contact.id);
-                              setDeliveryContacts((prev) => prev.filter((item) => item.id !== contact.id));
+                              await callWithRefresh((token) => deleteUserAddressRequest(token, contactId));
+                              setDeliveryContacts((prev) => prev.filter((item) => item.id !== contactId));
                             } catch (error) {
-                              setDeliveryError(error instanceof ApiError ? error.message : 'Unable to delete this delivery contact right now.');
+                              if (!(error instanceof ApiError && error.status === 401)) {
+                                setDeliveryError(error instanceof ApiError ? error.message : 'Unable to delete this delivery contact right now.');
+                              }
                             }
                           }}
                           className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-300/50 bg-red-500/20 px-4 py-2.5 text-sm font-bold text-red-200 transition-all hover:bg-red-500/30"

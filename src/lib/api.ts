@@ -136,6 +136,13 @@ export async function loginRequest(payload: {email: string; password: string}): 
   });
 }
 
+export async function refreshTokenRequest(refreshToken: string): Promise<AuthResponse> {
+  return apiRequest<AuthResponse>('/api/v1/auth/refresh', {
+    method: 'POST',
+    body: { refresh_token: refreshToken },
+  });
+}
+
 export async function registerRequest(payload: {
   email: string;
   password: string;
