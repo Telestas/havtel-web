@@ -556,26 +556,31 @@ export default function App() {
       .finally(() => setIsLoadingProducts(false));
   }, [authSession?.access_token]);
 
-  // Sync cart from server on login
+  // Sync cart from server on login / page refresh
   useEffect(() => {
     if (!authSession?.access_token) return;
     getCartRequest(authSession.access_token)
       .then((cart) => {
-        if (cart.items.length === 0) return;
+        const serverItems: CartItem[] = cart.items.map((si) => ({
+          variantId: si.variant_id,
+          productSlug: '',
+          productName: si.variant.name,
+          variantName: si.variant.name,
+          quantity: si.quantity,
+          price: parseFloat(si.unit_price),
+          img: null,
+        }));
         setCartItems((prev: CartItem[]) => {
-          const merged = [...prev];
-          for (const si of cart.items) {
-            const exists = merged.find((i) => i.variantId === si.variant_id);
-            if (!exists) {
-              merged.push({
-                variantId: si.variant_id,
-                productSlug: '',
-                productName: si.variant.name,
-                variantName: si.variant.name,
-                quantity: si.quantity,
-                price: parseFloat(si.unit_price),
-                img: null,
-              });
+          if (prev.length === 0) {
+            // Page refresh: server is the source of truth — replace entirely
+            return serverItems;
+          }
+          // Login with existing guest items: keep server items plus any
+          // guest items the server doesn't know about yet
+          const merged = [...serverItems];
+          for (const localItem of prev) {
+            if (!merged.find((i) => i.variantId === localItem.variantId)) {
+              merged.push(localItem);
             }
           }
           return merged;
@@ -1352,7 +1357,24 @@ function ShoppingBagView({
           </section>
 
           <aside className="h-fit rounded-[22px] border-[5px] border-[#7eb7db] bg-[rgba(255,250,241,0.92)] p-8 shadow-[0_16px_34px_rgba(107,154,187,0.16)] xl:sticky xl:top-10">
-            <h2 className="mb-10 text-[58px] font-black tracking-[-0.06em] text-[#1f6dad]">Order Summary</h2>
+            <h2 className="mb-8 text-[58px] font-black tracking-[-0.06em] text-[#1f6dad]">Order Summary</h2>
+
+            {cartItems.length > 0 && (
+              <>
+                <div className="mb-6 space-y-3">
+                  {cartItems.map((item) => (
+                    <div key={item.variantId} className="flex items-start justify-between gap-4">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[13px] font-black text-[#1f6dad]">{item.productName}</p>
+                        <p className="text-[12px] text-[#5c95bd]">{item.variantName} × {item.quantity}</p>
+                      </div>
+                      <span className="shrink-0 text-[14px] font-black text-[#1f6dad]">{formatCurrency(item.price * item.quantity)}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="mb-8 border-t border-[#c4dcec]"></div>
+              </>
+            )}
 
             <div className="space-y-8 text-lg">
               <div className="flex items-center justify-between gap-4">
