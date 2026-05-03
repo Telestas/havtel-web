@@ -408,7 +408,7 @@ export default function App() {
   const isCheckoutView =
     view === 'cart' || view === 'shipping' || view === 'payment' || view === 'confirmed' || view === 'tracking';
 
-  const addToCart = async (productSlug: string, preferredVariantId?: string) => {
+  const addToCart = async (productSlug: string, preferredVariantId?: string, quantity = 1) => {
     if (!authSession?.access_token) {
       setAuthError('Please sign in to add items to your cart.');
       setView('login');
@@ -438,7 +438,7 @@ export default function App() {
 
       await addCartItemRequest(authSession.access_token, {
         variant_id: variant.id,
-        quantity: 1,
+        quantity,
       });
 
       const primaryImg =
@@ -450,7 +450,7 @@ export default function App() {
         const existing = prev.find((item) => item.variantId === variant.id);
         if (existing) {
           return prev.map((item) =>
-            item.variantId === variant.id ? { ...item, quantity: item.quantity + 1 } : item,
+            item.variantId === variant.id ? { ...item, quantity: item.quantity + quantity } : item,
           );
         }
         return [
@@ -460,7 +460,7 @@ export default function App() {
             productSlug: detail.slug,
             productName: detail.name,
             variantName: variant.name,
-            quantity: 1,
+            quantity,
             price: parseFloat(variant.price),
             img: primaryImg,
           },
@@ -2431,19 +2431,12 @@ function TrackOrderView({
   const [order, setOrder] = useState<Order | null>(null);
   const [isLoadingOrder, setIsLoadingOrder] = useState(false);
   const [orderError, setOrderError] = useState<string | null>(null);
-  const subtotal = cartItems.reduce((sum, item) => {
-    const product = PRODUCTS.find((entry) => entry.id === item.productId);
-    return sum + (product?.price ?? 0) * item.quantity;
-  }, 0);
-  const shippingCost = shippingMethod === 'priority' ? 12 : 35;
-  const tax = subtotal * 0.08;
-  const total = subtotal + shippingCost + tax;
-  const trackingSteps = [
-    { key: 'confirmed', title: 'Order Confirmed', detail: 'Payment verified and order created in the Havtel system.' },
-    { key: 'processing', title: 'Hardware Assembly', detail: 'Components are being prepared and packaged for dispatch.' },
-    { key: 'in_transit', title: 'In Transit', detail: 'Carrier manifest created and shipment is on the move.' },
-    { key: 'delivered', title: 'Delivered', detail: 'Final delivery to your registered destination.' },
-  ];
+  const PIPELINE_STEPS = [
+    { key: 'confirmed', label: 'Order Confirmed' },
+    { key: 'processing', label: 'Processing' },
+    { key: 'in_transit', label: 'In Transit' },
+    { key: 'delivered', label: 'Delivered' },
+  ] as const;
 
   useEffect(() => {
     if (!authSession?.access_token || !trackedOrderId) {
@@ -2514,39 +2507,77 @@ function TrackOrderView({
               {orderError ? (
                 <p className="mb-8 rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">{orderError}</p>
               ) : null}
+
+              {/* Status header */}
               <div className="mb-10 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
                 <div>
                   <div className="text-sm font-bold uppercase tracking-[0.3em] text-slate-400">Current Status</div>
                   <div className="mt-3 text-4xl font-black capitalize text-[#9dd6ff]">{order?.status?.replaceAll('_', ' ') ?? 'Loading'}</div>
                 </div>
-                <div className="text-xl text-slate-400">{order?.tracking_code ? `Tracking code: ${order.tracking_code}` : 'Tracking code pending'}</div>
+                {order?.carrier_tracking_number ? (
+                  <div className="text-right">
+                    <div className="text-sm text-slate-500">{order.carrier ?? 'Carrier'}</div>
+                    <div className="font-mono text-xl font-bold text-[#9dd6ff]">{order.carrier_tracking_number}</div>
+                  </div>
+                ) : (
+                  <div className="text-lg text-slate-500">{order?.tracking_code ? `Ref: ${order.tracking_code}` : 'Tracking pending'}</div>
+                )}
               </div>
 
-              <div className="space-y-8">
-                {trackingSteps.map((step, index) => {
-                  const currentIndex = Math.max(0, trackingSteps.findIndex((entry) => entry.key === (order?.status ?? 'confirmed')));
-                  const done = index < currentIndex || (index === currentIndex && step.key !== order?.status);
-                  const current = step.key === order?.status;
+              {/* Progress pipeline */}
+              <div className="mb-10 flex items-center gap-0">
+                {PIPELINE_STEPS.map((step, index) => {
+                  const statusOrder = ['confirmed', 'processing', 'in_transit', 'delivered'];
+                  const currentIdx = statusOrder.indexOf(order?.status ?? 'confirmed');
+                  const stepIdx = statusOrder.indexOf(step.key);
+                  const done = stepIdx < currentIdx;
+                  const current = stepIdx === currentIdx;
                   return (
-                  <div key={step.title} className="flex gap-5">
-                    <div className="flex flex-col items-center">
-                      <div
-                        className={`flex h-12 w-12 items-center justify-center rounded-full ${
-                          done ? 'bg-[#9ee3ff] text-[#041521]' : current ? 'bg-[#223b53] text-[#b9d1ff] ring-4 ring-[#223b53]/40' : 'bg-[#252d39] text-slate-500'
-                        }`}
-                      >
-                        {done ? <Check size={22} /> : <div className="h-3 w-3 rounded-full bg-current"></div>}
+                    <div key={step.key} className="flex flex-1 items-center">
+                      <div className="flex flex-col items-center gap-2">
+                        <div className={`flex h-9 w-9 items-center justify-center rounded-full text-sm font-black transition-colors ${done ? 'bg-[#9ee3ff] text-[#041521]' : current ? 'bg-[#223b53] text-[#b9d1ff] ring-2 ring-[#4a7fa8]' : 'bg-[#1c2433] text-slate-600'}`}>
+                          {done ? <Check size={16} /> : <span>{index + 1}</span>}
+                        </div>
+                        <span className={`text-center text-[10px] font-bold uppercase tracking-wide ${done || current ? 'text-slate-300' : 'text-slate-600'}`}>
+                          {step.label}
+                        </span>
                       </div>
-                      {index < trackingSteps.length - 1 && (
-                        <div className={`mt-3 h-20 w-1 rounded-full ${done ? 'bg-[#5abaf0]' : 'bg-white/8'}`}></div>
+                      {index < PIPELINE_STEPS.length - 1 && (
+                        <div className={`mb-5 h-[2px] flex-1 ${done ? 'bg-[#5abaf0]' : 'bg-white/8'}`} />
                       )}
                     </div>
-                    <div className="pt-1">
-                      <h2 className="text-2xl font-bold text-slate-100">{step.title}</h2>
-                      <p className="mt-2 max-w-2xl text-xl leading-relaxed text-slate-400">{step.detail}</p>
-                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Real status history */}
+              <div>
+                <div className="mb-4 text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Activity Log</div>
+                {(order?.status_history ?? []).length === 0 ? (
+                  <p className="text-slate-500">No activity recorded yet.</p>
+                ) : (
+                  <div className="space-y-5">
+                    {(order?.status_history ?? []).map((entry) => (
+                      <div key={entry.id} className="flex gap-4">
+                        <div className="flex flex-col items-center">
+                          <div className="h-3 w-3 flex-shrink-0 rounded-full bg-[#4a7fa8] ring-4 ring-[#4a7fa8]/20" />
+                          <div className="mt-2 w-[1px] flex-1 bg-white/8" />
+                        </div>
+                        <div className="pb-4">
+                          <div className="text-base font-bold capitalize text-slate-200">
+                            {entry.new_status.replaceAll('_', ' ')}
+                          </div>
+                          {entry.note ? (
+                            <p className="mt-1 text-sm text-slate-400">{entry.note}</p>
+                          ) : null}
+                          <p className="mt-1 text-xs text-slate-600">
+                            {new Date(entry.created_at).toLocaleString()}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                )})}
+                )}
               </div>
             </div>
 
@@ -2602,14 +2633,14 @@ function TrackOrderView({
               </div>
               <div className="my-8 border-t border-white/5"></div>
               <div className="space-y-4 text-lg">
-                <div className="flex items-center justify-between"><span className="text-slate-300">Subtotal</span><span>{formatCurrency(Number(order?.subtotal_amount ?? subtotal))}</span></div>
-                <div className="flex items-center justify-between"><span className="text-slate-300">Shipping</span><span>{formatCurrency(Number(order?.shipping_amount ?? shippingCost))}</span></div>
-                <div className="flex items-center justify-between"><span className="text-slate-300">Tax</span><span>{formatCurrency(Number(order?.tax_amount ?? tax))}</span></div>
+                <div className="flex items-center justify-between"><span className="text-slate-300">Subtotal</span><span>{formatCurrency(Number(order?.subtotal_amount ?? 0))}</span></div>
+                <div className="flex items-center justify-between"><span className="text-slate-300">Shipping</span><span>{formatCurrency(Number(order?.shipping_amount ?? 0))}</span></div>
+                <div className="flex items-center justify-between"><span className="text-slate-300">Tax</span><span>{formatCurrency(Number(order?.tax_amount ?? 0))}</span></div>
               </div>
               <div className="my-8 border-t border-white/5"></div>
               <div className="flex items-end justify-between gap-4">
                 <span className="text-2xl font-bold text-slate-100">Total</span>
-                <span className="text-5xl font-black tracking-tight text-[#a9c7ff]">{formatCurrency(Number(order?.total_amount ?? total))}</span>
+                <span className="text-5xl font-black tracking-tight text-[#a9c7ff]">{formatCurrency(Number(order?.total_amount ?? 0))}</span>
               </div>
             </div>
 
@@ -3611,12 +3642,13 @@ const ICON_MAP: Record<string, LucideIcon> = {
   CircuitBoard,
 };
 
-function Shop({ products, categories, isLoading, onAddToCart, onProductSelect }: { products: Product[]; categories: Category[]; isLoading: boolean; onAddToCart: (slug: string) => void; onProductSelect: (slug: string) => void; key?: string }) {
+function Shop({ products, categories, isLoading, onAddToCart, onProductSelect }: { products: Product[]; categories: Category[]; isLoading: boolean; onAddToCart: (slug: string, variantId?: string, quantity?: number) => void; onProductSelect: (slug: string) => void; key?: string }) {
   const [activeCategory, setActiveCategory] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('Popularity');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [quantities, setQuantities] = useState<Record<string, number>>({});
   const PRODUCTS_PER_PAGE = 9;
 
   const maxProductPrice = Math.max(...products.map(p => p.price), 0);
@@ -3864,16 +3896,35 @@ function Shop({ products, categories, isLoading, onAddToCart, onProductSelect }:
                     </h3>
                     <div className="mt-3 flex items-center justify-between gap-2">
                       <span className="text-[16px] font-black tracking-[-0.04em] text-white">{prod.priceString}</span>
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          onAddToCart(prod.slug);
-                        }}
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] bg-[#1c6aa7] text-white shadow-[0_8px_16px_rgba(13,77,138,0.22)] transition-colors hover:bg-[#0d4d8a]"
-                      >
-                        <ShoppingCart size={14} />
-                      </button>
+                      <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          onClick={() => setQuantities((q) => ({ ...q, [prod.slug]: Math.max(1, (q[prod.slug] ?? 1) - 1) }))}
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-[6px] bg-white/20 text-white transition-colors hover:bg-white/30"
+                        >
+                          <Minus size={12} />
+                        </button>
+                        <span className="w-6 text-center text-[13px] font-black text-white">
+                          {quantities[prod.slug] ?? 1}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setQuantities((q) => ({ ...q, [prod.slug]: (q[prod.slug] ?? 1) + 1 }))}
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-[6px] bg-white/20 text-white transition-colors hover:bg-white/30"
+                        >
+                          <Plus size={12} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onAddToCart(prod.slug, undefined, quantities[prod.slug] ?? 1);
+                            setQuantities((q) => ({ ...q, [prod.slug]: 1 }));
+                          }}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] bg-[#1c6aa7] text-white shadow-[0_8px_16px_rgba(13,77,138,0.22)] transition-colors hover:bg-[#0d4d8a]"
+                        >
+                          <ShoppingCart size={14} />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </button>

@@ -108,10 +108,20 @@ export type OrderShippingAddress = {
   country: string;
 };
 
+export type OrderStatusHistoryEntry = {
+  id: string;
+  previous_status: OrderStatus | null;
+  new_status: OrderStatus;
+  note: string | null;
+  created_at: string;
+};
+
 export type Order = {
   id: string;
   order_number: string;
   tracking_code: string | null;
+  carrier: string | null;
+  carrier_tracking_number: string | null;
   status: OrderStatus;
   payment_type: string;
   shipping_method: string;
@@ -123,6 +133,7 @@ export type Order = {
   created_at: string;
   updated_at: string;
   items: OrderItem[];
+  status_history: OrderStatusHistoryEntry[];
 };
 
 export type AuthResponse = {
