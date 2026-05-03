@@ -2,7 +2,9 @@ import React, { useEffect, useRef, useState } from 'react';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 
-const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY as string);
+const stripePromise = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY
+  ? loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY as string)
+  : null;
 import {
   ShoppingCart,
   User,
@@ -380,7 +382,11 @@ function mapApiProductToLocal(
 
 export default function App() {
   const initialRoute = getCurrentRouteSnapshot();
-  const [view, setView] = useState<View>(initialRoute.view);
+  // Payment and shipping views require transient state (client_secret, shipping form)
+  // that is lost on page refresh — redirect to cart instead of showing a blank screen.
+  const safeInitialView = (v: View): View =>
+    v === 'payment' || v === 'shipping' ? 'cart' : v;
+  const [view, setView] = useState<View>(safeInitialView(initialRoute.view));
   const [selectedProductSlug, setSelectedProductSlug] = useState<string | null>(initialRoute.productSlug);
   const [notification, setNotification] = useState<string | null>(null);
   const [authSession, setAuthSession] = useState<AuthSession>(null);
