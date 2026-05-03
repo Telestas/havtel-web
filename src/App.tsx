@@ -133,6 +133,7 @@ type CheckoutShippingAddress = {
 type AuthSession = AuthResponse | null;
 
 const AUTH_STORAGE_KEY = 'havtel.auth.session';
+const CART_STORAGE_KEY = 'havtel.cart.items';
 
 const splitFullName = (fullName: string) => {
   const trimmedName = fullName.trim();
@@ -151,19 +152,56 @@ const formatCurrency = (value: number) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
 
 function HavtelLogo({ height = 34, light = false }: { height?: number; light?: boolean }) {
-  const navy = light ? 'white' : '#1a3f6f';
-  const bg = light ? 'transparent' : 'white';
-  const boxBg = light ? 'white' : '#1a3f6f';
-  const boxText = light ? '#1a3f6f' : 'white';
-  const border = light ? 'white' : '#1a3f6f';
+  const navy = '#1a3f6f';
+  const fontSize = Math.round(height * 0.5);
+  const px = Math.round(height * 0.2);
+  const borderWidth = Math.max(2, Math.round(height * 0.065));
+  const borderRadius = Math.round(height * 0.07);
   return (
-    <svg viewBox="0 0 120 40" height={height} xmlns="http://www.w3.org/2000/svg" style={{ display: 'block' }}>
-      <rect x="1.5" y="1.5" width="117" height="37" rx="2" fill={bg} stroke={border} strokeWidth="2.5"/>
-      <rect x="59" y="1.5" width="59.5" height="37" rx="2" fill={boxBg}/>
-      <rect x="59" y="1.5" width="6" height="37" fill={boxBg}/>
-      <text x="7" y="28" fontFamily="'Arial Black', Arial, sans-serif" fontSize="20" fontWeight="900" fill={navy} letterSpacing="-0.5">HAV</text>
-      <text x="63" y="28" fontFamily="'Arial Black', Arial, sans-serif" fontSize="20" fontWeight="900" fill={boxText} letterSpacing="-0.5">TEL</text>
-    </svg>
+    <div
+      style={{
+        display: 'inline-flex',
+        height: `${height}px`,
+        border: `${borderWidth}px solid ${light ? 'white' : navy}`,
+        borderRadius: `${borderRadius}px`,
+        overflow: 'hidden',
+        backgroundColor: light ? 'transparent' : 'white',
+        userSelect: 'none',
+        flexShrink: 0,
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          paddingInline: `${px}px`,
+          fontFamily: "'Arial Black', 'Arial Bold', Arial, sans-serif",
+          fontSize: `${fontSize}px`,
+          fontWeight: 900,
+          color: light ? 'white' : navy,
+          letterSpacing: '-0.03em',
+          lineHeight: 1,
+        }}
+      >
+        HAV
+      </div>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          paddingInline: `${px}px`,
+          fontFamily: "'Arial Black', 'Arial Bold', Arial, sans-serif",
+          fontSize: `${fontSize}px`,
+          fontWeight: 900,
+          color: light ? navy : 'white',
+          backgroundColor: light ? 'white' : navy,
+          letterSpacing: '-0.03em',
+          lineHeight: 1,
+        }}
+      >
+        TEL
+      </div>
+    </div>
   );
 }
 
@@ -394,7 +432,14 @@ export default function App() {
   const [isAuthSubmitting, setIsAuthSubmitting] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement | null>(null);
-  const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const [cartItems, setCartItems] = useState<CartItem[]>(() => {
+    try {
+      const stored = localStorage.getItem(CART_STORAGE_KEY);
+      return stored ? (JSON.parse(stored) as CartItem[]) : [];
+    } catch {
+      return [];
+    }
+  });
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [isLoadingProducts, setIsLoadingProducts] = useState(false);
@@ -409,6 +454,8 @@ export default function App() {
   const [trackedOrderId, setTrackedOrderId] = useState<string | null>(initialRoute.trackedOrderId);
   const isAuthenticated = authSession !== null;
   const isPopNavigationRef = useRef(false);
+  const initialTokenRef = useRef(authSession?.access_token ?? null);
+  const isFirstCartSyncDoneRef = useRef(false);
 
   const cartCount = cartItems.reduce((total, item) => total + item.quantity, 0);
   const isCheckoutView =
@@ -577,12 +624,16 @@ export default function App() {
           img: null,
         }));
         setCartItems((prev: CartItem[]) => {
-          if (prev.length === 0) {
-            // Page refresh: server is the source of truth — replace entirely
+          const isFirstSync = !isFirstCartSyncDoneRef.current;
+          isFirstCartSyncDoneRef.current = true;
+          // Page refresh (token was present at mount): server is authoritative,
+          // replace any stale localStorage cache with the live server state.
+          if (isFirstSync && initialTokenRef.current) {
             return serverItems;
           }
-          // Login with existing guest items: keep server items plus any
-          // guest items the server doesn't know about yet
+          // Mid-session login (guest → user): merge local cart into server cart
+          // so guest items that the server doesn't know about yet are preserved.
+          if (prev.length === 0) return serverItems;
           const merged = [...serverItems];
           for (const localItem of prev) {
             if (!merged.find((i) => i.variantId === localItem.variantId)) {
@@ -594,6 +645,15 @@ export default function App() {
       })
       .catch(() => {/* keep local cart */});
   }, [authSession?.access_token]);
+
+  // Persist cart to localStorage so it survives page refreshes
+  useEffect(() => {
+    try {
+      localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cartItems));
+    } catch {
+      // localStorage unavailable (private mode, storage full, etc.)
+    }
+  }, [cartItems]);
 
   const requireAuthForView = (nextView: View) => {
     if (isAuthenticated) {
@@ -3172,6 +3232,19 @@ function AuthLoginView({
 }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
+
+  function validate(): boolean {
+    const errors: { email?: string; password?: string } = {};
+    if (!email.trim()) {
+      errors.email = 'Email is required.';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      errors.email = 'Enter a valid email address.';
+    }
+    if (!password) errors.password = 'Password is required.';
+    setFieldErrors(errors);
+    return Object.keys(errors).length === 0;
+  }
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="min-h-screen bg-[linear-gradient(90deg,#ffffff_0%,#fbf7f4_70%,#fff6df_100%)] pt-20">
@@ -3194,19 +3267,35 @@ function AuthLoginView({
           <div className="rounded-[16px] bg-[linear-gradient(90deg,#64add9_0%,#73b4db_100%)] p-8 shadow-[0_20px_50px_rgba(95,168,215,0.24)] md:p-12">
             <h2 className="text-[58px] font-black tracking-[-0.06em] text-white">Login</h2>
             <form
+              noValidate
               onSubmit={async (event) => {
                 event.preventDefault();
+                if (!validate()) return;
                 await onLogin({ email, password });
               }}
               className="mt-10 space-y-7"
             >
               <label className="block">
                 <span className="mb-4 block text-[12px] font-black uppercase tracking-[0.08em] text-white">Email Address</span>
-                <input type="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@domain.tech" className="w-full rounded-[14px] border border-[#d6e4ec] bg-[linear-gradient(180deg,#fffefb_0%,#fbfbfd_100%)] px-7 py-5 text-[18px] text-[#1f5078] shadow-[0_8px_20px_rgba(22,71,104,0.18)] outline-none placeholder:text-[#5c85a2] focus:border-[#8dbbda]" />
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(event) => { setEmail(event.target.value); if (fieldErrors.email) setFieldErrors((prev) => ({ ...prev, email: undefined })); }}
+                  placeholder="name@domain.tech"
+                  className={`w-full rounded-[14px] border ${fieldErrors.email ? 'border-red-300' : 'border-[#d6e4ec]'} bg-[linear-gradient(180deg,#fffefb_0%,#fbfbfd_100%)] px-7 py-5 text-[18px] text-[#1f5078] shadow-[0_8px_20px_rgba(22,71,104,0.18)] outline-none placeholder:text-[#5c85a2] focus:border-[#8dbbda]`}
+                />
+                {fieldErrors.email && <p className="mt-2 text-[13px] font-semibold text-white/90">{fieldErrors.email}</p>}
               </label>
               <label className="block">
                 <span className="mb-4 block text-[12px] font-black uppercase tracking-[0.08em] text-white">Password</span>
-                <input type="password" required value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Enter your password" className="w-full rounded-[14px] border border-[#d6e4ec] bg-[linear-gradient(180deg,#fffefb_0%,#fbfbfd_100%)] px-7 py-5 text-[18px] text-[#1f5078] shadow-[0_8px_20px_rgba(22,71,104,0.18)] outline-none placeholder:text-[#5c85a2] focus:border-[#8dbbda]" />
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(event) => { setPassword(event.target.value); if (fieldErrors.password) setFieldErrors((prev) => ({ ...prev, password: undefined })); }}
+                  placeholder="Enter your password"
+                  className={`w-full rounded-[14px] border ${fieldErrors.password ? 'border-red-300' : 'border-[#d6e4ec]'} bg-[linear-gradient(180deg,#fffefb_0%,#fbfbfd_100%)] px-7 py-5 text-[18px] text-[#1f5078] shadow-[0_8px_20px_rgba(22,71,104,0.18)] outline-none placeholder:text-[#5c85a2] focus:border-[#8dbbda]`}
+                />
+                {fieldErrors.password && <p className="mt-2 text-[13px] font-semibold text-white/90">{fieldErrors.password}</p>}
               </label>
               {errorMessage ? (
                 <p className="rounded-[12px] border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-white">{errorMessage}</p>
@@ -3216,7 +3305,7 @@ function AuthLoginView({
                 <button type="button" onClick={onGoToSignup} className="hover:text-[#eaf6ff]">Create account</button>
               </div>
               <button type="submit" disabled={isSubmitting} className="w-full rounded-[12px] bg-[linear-gradient(90deg,#0f5ca0_0%,#1d6ea9_100%)] px-8 py-5 text-[18px] font-black text-white shadow-[0_14px_30px_rgba(13,77,138,0.24)] disabled:cursor-not-allowed disabled:opacity-70">
-                {isSubmitting ? 'Signing In...' : 'Sing In'}
+                {isSubmitting ? 'Signing In...' : 'Sign In'}
               </button>
             </form>
           </div>
@@ -3253,6 +3342,35 @@ function AuthSignupView({
   const [companyName, setCompanyName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<{
+    firstName?: string;
+    lastName?: string;
+    companyName?: string;
+    email?: string;
+    password?: string;
+  }>({});
+
+  function validate(): boolean {
+    const errors: typeof fieldErrors = {};
+    if (accountType === 'b2b') {
+      if (!companyName.trim()) errors.companyName = 'Company name is required.';
+    } else {
+      if (!firstName.trim()) errors.firstName = 'First name is required.';
+      if (!lastName.trim()) errors.lastName = 'Last name is required.';
+    }
+    if (!email.trim()) {
+      errors.email = 'Email is required.';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      errors.email = 'Enter a valid email address.';
+    }
+    if (!password) {
+      errors.password = 'Password is required.';
+    } else if (password.length < 8) {
+      errors.password = 'Password must be at least 8 characters.';
+    }
+    setFieldErrors(errors);
+    return Object.keys(errors).length === 0;
+  }
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="min-h-screen bg-[linear-gradient(90deg,#ffffff_0%,#fbf7f4_70%,#fff6df_100%)] pt-20">
@@ -3275,8 +3393,10 @@ function AuthSignupView({
           <div className="rounded-[16px] bg-[linear-gradient(90deg,#64add9_0%,#73b4db_100%)] p-8 shadow-[0_20px_50px_rgba(95,168,215,0.24)] md:p-12">
             <h2 className="text-[58px] font-black tracking-[-0.06em] text-white">Sign Up</h2>
             <form
+              noValidate
               onSubmit={async (event) => {
                 event.preventDefault();
+                if (!validate()) return;
                 await onSignup({ accountType, firstName, lastName, companyName, email, password });
               }}
               className="mt-10 grid grid-cols-1 gap-6"
@@ -3284,7 +3404,7 @@ function AuthSignupView({
               <div className="grid grid-cols-1 gap-3 rounded-[16px] bg-white/10 p-3 sm:grid-cols-2">
                 <button
                   type="button"
-                  onClick={() => setAccountType('b2c')}
+                  onClick={() => { setAccountType('b2c'); setFieldErrors({}); }}
                   className={`rounded-[12px] px-5 py-4 text-left transition-all ${
                     accountType === 'b2c'
                       ? 'bg-[linear-gradient(180deg,#f7fbff_0%,#d7ecfa_100%)] text-[#0f5ca0]'
@@ -3301,7 +3421,7 @@ function AuthSignupView({
                 </button>
                 <button
                   type="button"
-                  onClick={() => setAccountType('b2b')}
+                  onClick={() => { setAccountType('b2b'); setFieldErrors({}); }}
                   className={`rounded-[12px] px-5 py-4 text-left transition-all ${
                     accountType === 'b2b'
                       ? 'bg-[linear-gradient(180deg,#f7fbff_0%,#d7ecfa_100%)] text-[#0f5ca0]'
@@ -3319,21 +3439,35 @@ function AuthSignupView({
               </div>
 
               {accountType === 'b2b' ? (
-                <input
-                  required
-                  value={companyName}
-                  onChange={(event) => setCompanyName(event.target.value)}
-                  placeholder="Company name"
-                  className="w-full rounded-[14px] border border-[#d6e4ec] bg-[linear-gradient(180deg,#fffefb_0%,#fbfbfd_100%)] px-7 py-5 text-[18px] text-[#1f5078] shadow-[0_8px_20px_rgba(22,71,104,0.18)] outline-none placeholder:text-[#5c85a2] focus:border-[#8dbbda]"
-                />
+                <div>
+                  <input
+                    value={companyName}
+                    onChange={(event) => { setCompanyName(event.target.value); if (fieldErrors.companyName) setFieldErrors((prev) => ({ ...prev, companyName: undefined })); }}
+                    placeholder="Company name"
+                    className={`w-full rounded-[14px] border ${fieldErrors.companyName ? 'border-red-300' : 'border-[#d6e4ec]'} bg-[linear-gradient(180deg,#fffefb_0%,#fbfbfd_100%)] px-7 py-5 text-[18px] text-[#1f5078] shadow-[0_8px_20px_rgba(22,71,104,0.18)] outline-none placeholder:text-[#5c85a2] focus:border-[#8dbbda]`}
+                  />
+                  {fieldErrors.companyName && <p className="mt-2 text-[13px] font-semibold text-white/90">{fieldErrors.companyName}</p>}
+                </div>
               ) : (
                 <>
-                  <input required value={firstName} onChange={(event) => setFirstName(event.target.value)} placeholder="First name" className="w-full rounded-[14px] border border-[#d6e4ec] bg-[linear-gradient(180deg,#fffefb_0%,#fbfbfd_100%)] px-7 py-5 text-[18px] text-[#1f5078] shadow-[0_8px_20px_rgba(22,71,104,0.18)] outline-none placeholder:text-[#5c85a2] focus:border-[#8dbbda]" />
-                  <input required value={lastName} onChange={(event) => setLastName(event.target.value)} placeholder="Last name" className="w-full rounded-[14px] border border-[#d6e4ec] bg-[linear-gradient(180deg,#fffefb_0%,#fbfbfd_100%)] px-7 py-5 text-[18px] text-[#1f5078] shadow-[0_8px_20px_rgba(22,71,104,0.18)] outline-none placeholder:text-[#5c85a2] focus:border-[#8dbbda]" />
+                  <div>
+                    <input value={firstName} onChange={(event) => { setFirstName(event.target.value); if (fieldErrors.firstName) setFieldErrors((prev) => ({ ...prev, firstName: undefined })); }} placeholder="First name" className={`w-full rounded-[14px] border ${fieldErrors.firstName ? 'border-red-300' : 'border-[#d6e4ec]'} bg-[linear-gradient(180deg,#fffefb_0%,#fbfbfd_100%)] px-7 py-5 text-[18px] text-[#1f5078] shadow-[0_8px_20px_rgba(22,71,104,0.18)] outline-none placeholder:text-[#5c85a2] focus:border-[#8dbbda]`} />
+                    {fieldErrors.firstName && <p className="mt-2 text-[13px] font-semibold text-white/90">{fieldErrors.firstName}</p>}
+                  </div>
+                  <div>
+                    <input value={lastName} onChange={(event) => { setLastName(event.target.value); if (fieldErrors.lastName) setFieldErrors((prev) => ({ ...prev, lastName: undefined })); }} placeholder="Last name" className={`w-full rounded-[14px] border ${fieldErrors.lastName ? 'border-red-300' : 'border-[#d6e4ec]'} bg-[linear-gradient(180deg,#fffefb_0%,#fbfbfd_100%)] px-7 py-5 text-[18px] text-[#1f5078] shadow-[0_8px_20px_rgba(22,71,104,0.18)] outline-none placeholder:text-[#5c85a2] focus:border-[#8dbbda]`} />
+                    {fieldErrors.lastName && <p className="mt-2 text-[13px] font-semibold text-white/90">{fieldErrors.lastName}</p>}
+                  </div>
                 </>
               )}
-              <input required type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="Email address" className="w-full rounded-[14px] border border-[#d6e4ec] bg-[linear-gradient(180deg,#fffefb_0%,#fbfbfd_100%)] px-7 py-5 text-[18px] text-[#1f5078] shadow-[0_8px_20px_rgba(22,71,104,0.18)] outline-none placeholder:text-[#5c85a2] focus:border-[#8dbbda]" />
-              <input required type="password" minLength={8} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Create password" className="w-full rounded-[14px] border border-[#d6e4ec] bg-[linear-gradient(180deg,#fffefb_0%,#fbfbfd_100%)] px-7 py-5 text-[18px] text-[#1f5078] shadow-[0_8px_20px_rgba(22,71,104,0.18)] outline-none placeholder:text-[#5c85a2] focus:border-[#8dbbda]" />
+              <div>
+                <input type="email" value={email} onChange={(event) => { setEmail(event.target.value); if (fieldErrors.email) setFieldErrors((prev) => ({ ...prev, email: undefined })); }} placeholder="Email address" className={`w-full rounded-[14px] border ${fieldErrors.email ? 'border-red-300' : 'border-[#d6e4ec]'} bg-[linear-gradient(180deg,#fffefb_0%,#fbfbfd_100%)] px-7 py-5 text-[18px] text-[#1f5078] shadow-[0_8px_20px_rgba(22,71,104,0.18)] outline-none placeholder:text-[#5c85a2] focus:border-[#8dbbda]`} />
+                {fieldErrors.email && <p className="mt-2 text-[13px] font-semibold text-white/90">{fieldErrors.email}</p>}
+              </div>
+              <div>
+                <input type="password" value={password} onChange={(event) => { setPassword(event.target.value); if (fieldErrors.password) setFieldErrors((prev) => ({ ...prev, password: undefined })); }} placeholder="Create password" className={`w-full rounded-[14px] border ${fieldErrors.password ? 'border-red-300' : 'border-[#d6e4ec]'} bg-[linear-gradient(180deg,#fffefb_0%,#fbfbfd_100%)] px-7 py-5 text-[18px] text-[#1f5078] shadow-[0_8px_20px_rgba(22,71,104,0.18)] outline-none placeholder:text-[#5c85a2] focus:border-[#8dbbda]`} />
+                {fieldErrors.password && <p className="mt-2 text-[13px] font-semibold text-white/90">{fieldErrors.password}</p>}
+              </div>
               {errorMessage ? (
                 <p className="rounded-[12px] border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-white">{errorMessage}</p>
               ) : null}
